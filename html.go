@@ -78,7 +78,7 @@ type HtmlRendererParameters struct {
 //
 // Do not create this directly, instead use the HtmlRenderer function.
 type Html struct {
-	flags    int    // HTML_* options
+	flags    HtmlFlags
 	closeTag string // how to end singleton tags: either " />\n" or ">\n"
 	title    string // document title
 	css      string // optional css file url (used with HTML_COMPLETE_PAGE)
@@ -105,19 +105,19 @@ const (
 // HtmlRenderer creates and configures an Html object, which
 // satisfies the Renderer interface.
 //
-// flags is a set of HTML_* options ORed together.
+// flags is a set of HtmlFlags ORed together.
 // title is the title of the document, and css is a URL for the document's
 // stylesheet.
-// title and css are only used when HTML_COMPLETE_PAGE is selected.
-func HtmlRenderer(flags int, title string, css string) Renderer {
+// title and css are only used when CompletePage is selected.
+func HtmlRenderer(flags HtmlFlags, title string, css string) Renderer {
 	return HtmlRendererWithParameters(flags, title, css, HtmlRendererParameters{})
 }
 
-func HtmlRendererWithParameters(flags int, title string,
+func HtmlRendererWithParameters(flags HtmlFlags, title string,
 	css string, renderParameters HtmlRendererParameters) Renderer {
 	// configure the rendering engine
 	closeTag := htmlClose
-	if flags&HTML_USE_XHTML != 0 {
+	if flags&UseXHTML != 0 {
 		closeTag = xhtmlClose
 	}
 
@@ -189,7 +189,7 @@ func entityEscapeWithSkip(out *bytes.Buffer, src []byte, skipRanges [][]int) {
 	attrEscape(out, src[end:])
 }
 
-func (options *Html) GetFlags() int {
+func (options *Html) GetFlags() HtmlFlags {
 	return options.flags
 }
 
@@ -205,7 +205,7 @@ func (options *Html) Header(out *bytes.Buffer, text func() bool, level int, id s
 	marker := out.Len()
 	doubleSpace(out)
 
-	if id == "" && options.flags&HTML_TOC != 0 {
+	if id == "" && options.flags&Toc != 0 {
 		id = fmt.Sprintf("toc_%d", options.headerCount)
 	}
 
@@ -232,7 +232,7 @@ func (options *Html) Header(out *bytes.Buffer, text func() bool, level int, id s
 	}
 
 	// are we building a table of contents?
-	if options.flags&HTML_TOC != 0 {
+	if options.flags&Toc != 0 {
 		options.TocHeaderWithAnchor(out.Bytes()[tocMarker:], level, id)
 	}
 
@@ -240,7 +240,7 @@ func (options *Html) Header(out *bytes.Buffer, text func() bool, level int, id s
 }
 
 func (options *Html) BlockHtml(out *bytes.Buffer, text []byte) {
-	if options.flags&HTML_SKIP_HTML != 0 {
+	if options.flags&SkipHTML != 0 {
 		return
 	}
 
@@ -293,7 +293,7 @@ func (options *Html) BlockQuote(out *bytes.Buffer, text []byte) {
 	out.WriteString("</blockquote>\n")
 }
 
-func (options *Html) Table(out *bytes.Buffer, header []byte, body []byte, columnData []int) {
+func (options *Html) Table(out *bytes.Buffer, header []byte, body []byte, columnData []TableFlags) {
 	doubleSpace(out)
 	out.WriteString("<table>\n<thead>\n")
 	out.Write(header)
@@ -309,14 +309,14 @@ func (options *Html) TableRow(out *bytes.Buffer, text []byte) {
 	out.WriteString("\n</tr>\n")
 }
 
-func (options *Html) TableHeaderCell(out *bytes.Buffer, text []byte, align int) {
+func (options *Html) TableHeaderCell(out *bytes.Buffer, text []byte, align TableFlags) {
 	doubleSpace(out)
 	switch align {
-	case TABLE_ALIGNMENT_LEFT:
+	case TableAlignmentLeft:
 		out.WriteString("<th align=\"left\">")
-	case TABLE_ALIGNMENT_RIGHT:
+	case TableAlignmentRight:
 		out.WriteString("<th align=\"right\">")
-	case TABLE_ALIGNMENT_CENTER:
+	case TableAlignmentCenter:
 		out.WriteString("<th align=\"center\">")
 	default:
 		out.WriteString("<th>")
@@ -326,14 +326,14 @@ func (options *Html) TableHeaderCell(out *bytes.Buffer, text []byte, align int) 
 	out.WriteString("</th>")
 }
 
-func (options *Html) TableCell(out *bytes.Buffer, text []byte, align int) {
+func (options *Html) TableCell(out *bytes.Buffer, text []byte, align TableFlags) {
 	doubleSpace(out)
 	switch align {
-	case TABLE_ALIGNMENT_LEFT:
+	case TableAlignmentLeft:
 		out.WriteString("<td align=\"left\">")
-	case TABLE_ALIGNMENT_RIGHT:
+	case TableAlignmentRight:
 		out.WriteString("<td align=\"right\">")
-	case TABLE_ALIGNMENT_CENTER:
+	case TableAlignmentCenter:
 		out.WriteString("<td align=\"center\">")
 	default:
 		out.WriteString("<td>")
@@ -346,12 +346,12 @@ func (options *Html) TableCell(out *bytes.Buffer, text []byte, align int) {
 func (options *Html) Footnotes(out *bytes.Buffer, text func() bool) {
 	out.WriteString("<div class=\"footnotes\">\n")
 	options.HRule(out)
-	options.List(out, text, LIST_TYPE_ORDERED)
+	options.List(out, text, ListTypeOrdered)
 	out.WriteString("</div>\n")
 }
 
-func (options *Html) FootnoteItem(out *bytes.Buffer, name, text []byte, flags int) {
-	if flags&LIST_ITEM_CONTAINS_BLOCK != 0 || flags&LIST_ITEM_BEGINNING_OF_LIST != 0 {
+func (options *Html) FootnoteItem(out *bytes.Buffer, name, text []byte, flags ListType) {
+	if flags&ListItemContainsBlock != 0 || flags&ListItemBeginningOfList != 0 {
 		doubleSpace(out)
 	}
 	slug := slugify(name)
@@ -361,7 +361,7 @@ func (options *Html) FootnoteItem(out *bytes.Buffer, name, text []byte, flags in
 	out.Write(slug)
 	out.WriteString(`">`)
 	out.Write(text)
-	if options.flags&HTML_FOOTNOTE_RETURN_LINKS != 0 {
+	if options.flags&FootnoteReturnLinks != 0 {
 		out.WriteString(` <a class="footnote-return" href="#`)
 		out.WriteString(`fnref:`)
 		out.WriteString(options.parameters.FootnoteAnchorPrefix)
@@ -373,11 +373,11 @@ func (options *Html) FootnoteItem(out *bytes.Buffer, name, text []byte, flags in
 	out.WriteString("</li>\n")
 }
 
-func (options *Html) List(out *bytes.Buffer, text func() bool, flags int) {
+func (options *Html) List(out *bytes.Buffer, text func() bool, flags ListType) {
 	marker := out.Len()
 	doubleSpace(out)
 
-	if flags&LIST_TYPE_ORDERED != 0 {
+	if flags&ListTypeOrdered != 0 {
 		out.WriteString("<ol>")
 	} else {
 		out.WriteString("<ul>")
@@ -386,15 +386,15 @@ func (options *Html) List(out *bytes.Buffer, text func() bool, flags int) {
 		out.Truncate(marker)
 		return
 	}
-	if flags&LIST_TYPE_ORDERED != 0 {
+	if flags&ListTypeOrdered != 0 {
 		out.WriteString("</ol>\n")
 	} else {
 		out.WriteString("</ul>\n")
 	}
 }
 
-func (options *Html) ListItem(out *bytes.Buffer, text []byte, flags int) {
-	if flags&LIST_ITEM_CONTAINS_BLOCK != 0 || flags&LIST_ITEM_BEGINNING_OF_LIST != 0 {
+func (options *Html) ListItem(out *bytes.Buffer, text []byte, flags ListType) {
+	if flags&ListItemContainsBlock != 0 || flags&ListItemBeginningOfList != 0 {
 		doubleSpace(out)
 	}
 	out.WriteString("<li>")
@@ -414,9 +414,9 @@ func (options *Html) Paragraph(out *bytes.Buffer, text func() bool) {
 	out.WriteString("</p>\n")
 }
 
-func (options *Html) AutoLink(out *bytes.Buffer, link []byte, kind int) {
+func (options *Html) AutoLink(out *bytes.Buffer, link []byte, kind LinkType) {
 	skipRanges := htmlEntity.FindAllIndex(link, -1)
-	if options.flags&HTML_SAFELINK != 0 && !isSafeLink(link) && kind != LINK_TYPE_EMAIL {
+	if options.flags&Safelink != 0 && !isSafeLink(link) && kind != LinkTypeEmail {
 		// mark it but don't link it if it is not a safe link: no smartypants
 		out.WriteString("<tt>")
 		entityEscapeWithSkip(out, link, skipRanges)
@@ -425,7 +425,7 @@ func (options *Html) AutoLink(out *bytes.Buffer, link []byte, kind int) {
 	}
 
 	out.WriteString("<a href=\"")
-	if kind == LINK_TYPE_EMAIL {
+	if kind == LinkTypeEmail {
 		out.WriteString("mailto:")
 	} else {
 		options.maybeWriteAbsolutePrefix(out, link)
@@ -434,10 +434,10 @@ func (options *Html) AutoLink(out *bytes.Buffer, link []byte, kind int) {
 	entityEscapeWithSkip(out, link, skipRanges)
 
 	var relAttrs []string
-	if options.flags&HTML_NOFOLLOW_LINKS != 0 && !isRelativeLink(link) {
+	if options.flags&NofollowLinks != 0 && !isRelativeLink(link) {
 		relAttrs = append(relAttrs, "nofollow")
 	}
-	if options.flags&HTML_NOREFERRER_LINKS != 0 && !isRelativeLink(link) {
+	if options.flags&NoreferrerLinks != 0 && !isRelativeLink(link) {
 		relAttrs = append(relAttrs, "noreferrer")
 	}
 	if len(relAttrs) > 0 {
@@ -445,7 +445,7 @@ func (options *Html) AutoLink(out *bytes.Buffer, link []byte, kind int) {
 	}
 
 	// blank target only add to external link
-	if options.flags&HTML_HREF_TARGET_BLANK != 0 && !isRelativeLink(link) {
+	if options.flags&HrefTargetBlank != 0 && !isRelativeLink(link) {
 		out.WriteString("\" target=\"_blank")
 	}
 
@@ -497,7 +497,7 @@ func (options *Html) maybeWriteAbsolutePrefix(out *bytes.Buffer, link []byte) {
 }
 
 func (options *Html) Image(out *bytes.Buffer, link []byte, title []byte, alt []byte) {
-	if options.flags&HTML_SKIP_IMAGES != 0 {
+	if options.flags&SkipImages != 0 {
 		return
 	}
 
@@ -524,7 +524,7 @@ func (options *Html) LineBreak(out *bytes.Buffer) {
 }
 
 func (options *Html) Link(out *bytes.Buffer, link []byte, title []byte, content []byte) {
-	if options.flags&HTML_SKIP_LINKS != 0 {
+	if options.flags&SkipLinks != 0 {
 		// write the link text out but don't link it, just mark it with typewriter font
 		out.WriteString("<tt>")
 		attrEscape(out, content)
@@ -532,7 +532,7 @@ func (options *Html) Link(out *bytes.Buffer, link []byte, title []byte, content 
 		return
 	}
 
-	if options.flags&HTML_SAFELINK != 0 && !isSafeLink(link) {
+	if options.flags&Safelink != 0 && !isSafeLink(link) {
 		// write the link text out but don't link it, just mark it with typewriter font
 		out.WriteString("<tt>")
 		attrEscape(out, content)
@@ -548,10 +548,10 @@ func (options *Html) Link(out *bytes.Buffer, link []byte, title []byte, content 
 		attrEscape(out, title)
 	}
 	var relAttrs []string
-	if options.flags&HTML_NOFOLLOW_LINKS != 0 && !isRelativeLink(link) {
+	if options.flags&NofollowLinks != 0 && !isRelativeLink(link) {
 		relAttrs = append(relAttrs, "nofollow")
 	}
-	if options.flags&HTML_NOREFERRER_LINKS != 0 && !isRelativeLink(link) {
+	if options.flags&NoreferrerLinks != 0 && !isRelativeLink(link) {
 		relAttrs = append(relAttrs, "noreferrer")
 	}
 	if len(relAttrs) > 0 {
@@ -559,7 +559,7 @@ func (options *Html) Link(out *bytes.Buffer, link []byte, title []byte, content 
 	}
 
 	// blank target only add to external link
-	if options.flags&HTML_HREF_TARGET_BLANK != 0 && !isRelativeLink(link) {
+	if options.flags&HrefTargetBlank != 0 && !isRelativeLink(link) {
 		out.WriteString("\" target=\"_blank")
 	}
 
@@ -570,16 +570,16 @@ func (options *Html) Link(out *bytes.Buffer, link []byte, title []byte, content 
 }
 
 func (options *Html) RawHtmlTag(out *bytes.Buffer, text []byte) {
-	if options.flags&HTML_SKIP_HTML != 0 {
+	if options.flags&SkipHTML != 0 {
 		return
 	}
-	if options.flags&HTML_SKIP_STYLE != 0 && isHtmlTag(text, "style") {
+	if options.flags&SkipStyle != 0 && isHtmlTag(text, "style") {
 		return
 	}
-	if options.flags&HTML_SKIP_LINKS != 0 && isHtmlTag(text, "a") {
+	if options.flags&SkipLinks != 0 && isHtmlTag(text, "a") {
 		return
 	}
-	if options.flags&HTML_SKIP_IMAGES != 0 && isHtmlTag(text, "img") {
+	if options.flags&SkipImages != 0 && isHtmlTag(text, "img") {
 		return
 	}
 	out.Write(text)
@@ -617,7 +617,7 @@ func (options *Html) Entity(out *bytes.Buffer, entity []byte) {
 }
 
 func (options *Html) NormalText(out *bytes.Buffer, text []byte) {
-	if options.flags&HTML_USE_SMARTYPANTS != 0 {
+	if options.flags&UseSmartypants != 0 {
 		options.Smartypants(out, text)
 	} else {
 		attrEscape(out, text)
@@ -654,12 +654,12 @@ func (options *Html) Smartypants(out *bytes.Buffer, text []byte) {
 }
 
 func (options *Html) DocumentHeader(out *bytes.Buffer) {
-	if options.flags&HTML_COMPLETE_PAGE == 0 {
+	if options.flags&CompletePage == 0 {
 		return
 	}
 
 	ending := ""
-	if options.flags&HTML_USE_XHTML != 0 {
+	if options.flags&UseXHTML != 0 {
 		out.WriteString("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" ")
 		out.WriteString("\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n")
 		out.WriteString("<html xmlns=\"http://www.w3.org/1999/xhtml\">\n")
@@ -673,7 +673,7 @@ func (options *Html) DocumentHeader(out *bytes.Buffer) {
 	options.NormalText(out, []byte(options.title))
 	out.WriteString("</title>\n")
 	out.WriteString("  <meta name=\"GENERATOR\" content=\"Blackfriday Markdown Processor v")
-	out.WriteString(VERSION)
+	out.WriteString(Version)
 	out.WriteString("\"")
 	out.WriteString(ending)
 	out.WriteString(">\n")
@@ -695,7 +695,7 @@ func (options *Html) DocumentHeader(out *bytes.Buffer) {
 
 func (options *Html) DocumentFooter(out *bytes.Buffer) {
 	// finalize and insert the table of contents
-	if options.flags&HTML_TOC != 0 {
+	if options.flags&Toc != 0 {
 		options.TocFinalize()
 
 		// now we have to insert the table of contents into the document
@@ -708,7 +708,7 @@ func (options *Html) DocumentFooter(out *bytes.Buffer) {
 		out.Truncate(options.tocMarker)
 
 		// corner case spacing issue
-		if options.flags&HTML_COMPLETE_PAGE != 0 {
+		if options.flags&CompletePage != 0 {
 			out.WriteByte('\n')
 		}
 
@@ -718,17 +718,17 @@ func (options *Html) DocumentFooter(out *bytes.Buffer) {
 		out.WriteString("</nav>\n")
 
 		// corner case spacing issue
-		if options.flags&HTML_COMPLETE_PAGE == 0 && options.flags&HTML_OMIT_CONTENTS == 0 {
+		if options.flags&CompletePage == 0 && options.flags&OmitContents == 0 {
 			out.WriteByte('\n')
 		}
 
 		// write out everything that came after it
-		if options.flags&HTML_OMIT_CONTENTS == 0 {
+		if options.flags&OmitContents == 0 {
 			out.Write(temp.Bytes())
 		}
 	}
 
-	if options.flags&HTML_COMPLETE_PAGE != 0 {
+	if options.flags&CompletePage != 0 {
 		out.WriteString("\n</body>\n")
 		out.WriteString("</html>\n")
 	}
