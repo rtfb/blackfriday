@@ -153,19 +153,19 @@ type Renderer interface {
 	BlockHtml(out *bytes.Buffer, text []byte)
 	Header(out *bytes.Buffer, text func() bool, level int, id string)
 	HRule(out *bytes.Buffer)
-	List(out *bytes.Buffer, text func() bool, flags int)
-	ListItem(out *bytes.Buffer, text []byte, flags int)
+	List(out *bytes.Buffer, text func() bool, flags ListType)
+	ListItem(out *bytes.Buffer, text []byte, flags ListType)
 	Paragraph(out *bytes.Buffer, text func() bool)
-	Table(out *bytes.Buffer, header []byte, body []byte, columnData []int)
+	Table(out *bytes.Buffer, header []byte, body []byte, columnData []TableFlags)
 	TableRow(out *bytes.Buffer, text []byte)
-	TableHeaderCell(out *bytes.Buffer, text []byte, flags int)
-	TableCell(out *bytes.Buffer, text []byte, flags int)
+	TableHeaderCell(out *bytes.Buffer, text []byte, flags TableFlags)
+	TableCell(out *bytes.Buffer, text []byte, flags TableFlags)
 	Footnotes(out *bytes.Buffer, text func() bool)
-	FootnoteItem(out *bytes.Buffer, name, text []byte, flags int)
+	FootnoteItem(out *bytes.Buffer, name, text []byte, flags ListType)
 	TitleBlock(out *bytes.Buffer, text []byte)
 
 	// Span-level callbacks
-	AutoLink(out *bytes.Buffer, link []byte, kind int)
+	AutoLink(out *bytes.Buffer, link []byte, kind LinkType)
 	CodeSpan(out *bytes.Buffer, text []byte)
 	DoubleEmphasis(out *bytes.Buffer, text []byte)
 	Emphasis(out *bytes.Buffer, text []byte)
@@ -185,7 +185,7 @@ type Renderer interface {
 	DocumentHeader(out *bytes.Buffer)
 	DocumentFooter(out *bytes.Buffer)
 
-	GetFlags() int
+	GetFlags() HtmlFlags
 }
 
 // Callback functions for inline parsing. One such function is defined
@@ -198,7 +198,7 @@ type parser struct {
 	r              Renderer
 	refs           map[string]*reference
 	inlineCallback [256]inlineParser
-	flags          int // TODO: int ==> Extensions
+	flags          Extensions
 	nesting        int
 	maxNesting     int
 	insideLink     bool
@@ -218,14 +218,7 @@ type parser struct {
 // MarkdownBasic is a convenience function for simple rendering.
 // It processes markdown input with no extensions enabled.
 func MarkdownBasic(input []byte) []byte {
-	// set up the HTML renderer
-	htmlFlags := HTML_USE_XHTML
-	renderer := HtmlRenderer(htmlFlags, "", "")
-
-	// set up the parser
-	extensions := 0
-
-	return Markdown(input, renderer, extensions)
+	return Markdown(input, HtmlRenderer(UseXHTML, "", ""), NoExtensions)
 }
 
 // Call Markdown with most useful extensions enabled
@@ -260,7 +253,7 @@ func MarkdownCommon(input []byte) []byte {
 //
 // To use the supplied Html or LaTeX renderers, see HtmlRenderer and
 // LatexRenderer, respectively.
-func Markdown(input []byte, renderer Renderer, extensions int) []byte {
+func Markdown(input []byte, renderer Renderer, extensions Extensions) []byte {
 	// no point in parsing if we can't render
 	if renderer == nil {
 		return nil
@@ -277,7 +270,7 @@ func Markdown(input []byte, renderer Renderer, extensions int) []byte {
 	// register inline parsers
 	p.inlineCallback['*'] = emphasis
 	p.inlineCallback['_'] = emphasis
-	if extensions&EXTENSION_STRIKETHROUGH != 0 {
+	if extensions&Strikethrough != 0 {
 		p.inlineCallback['~'] = emphasis
 	}
 	p.inlineCallback['`'] = codeSpan
@@ -287,11 +280,11 @@ func Markdown(input []byte, renderer Renderer, extensions int) []byte {
 	p.inlineCallback['\\'] = escape
 	p.inlineCallback['&'] = entity
 
-	if extensions&EXTENSION_AUTOLINK != 0 {
+	if extensions&Autolink != 0 {
 		p.inlineCallback[':'] = autoLink
 	}
 
-	if extensions&EXTENSION_FOOTNOTES != 0 {
+	if extensions&Footnotes != 0 {
 		p.notes = make([]*reference, 0)
 	}
 
@@ -308,9 +301,9 @@ func Markdown(input []byte, renderer Renderer, extensions int) []byte {
 // - add missing newlines before fenced code blocks
 func firstPass(p *parser, input []byte) []byte {
 	var out bytes.Buffer
-	tabSize := TAB_SIZE_DEFAULT
-	if p.flags&EXTENSION_TAB_SIZE_EIGHT != 0 {
-		tabSize = TAB_SIZE_EIGHT
+	tabSize := TabSizeDefault
+	if p.flags&TabSizeEight != 0 {
+		tabSize = TabSizeDouble
 	}
 	beg, end := 0, 0
 	lastLineWasBlank := false
@@ -324,7 +317,7 @@ func firstPass(p *parser, input []byte) []byte {
 				end++
 			}
 
-			if p.flags&EXTENSION_FENCED_CODE != 0 {
+			if p.flags&FencedCode != 0 {
 				// when last line was none blank and a fenced code block comes after
 				if beg >= lastFencedCodeBlockEnd {
 					if i := p.fencedCode(&out, input[beg:], false); i > 0 {
@@ -373,19 +366,19 @@ func secondPass(p *parser, input []byte) []byte {
 	p.r.DocumentHeader(&output)
 	p.block(&output, input)
 
-	if p.flags&EXTENSION_FOOTNOTES != 0 && len(p.notes) > 0 {
+	if p.flags&Footnotes != 0 && len(p.notes) > 0 {
 		p.r.Footnotes(&output, func() bool {
-			flags := LIST_ITEM_BEGINNING_OF_LIST
+			flags := ListItemBeginningOfList
 			for _, ref := range p.notes {
 				var buf bytes.Buffer
 				if ref.hasBlock {
-					flags |= LIST_ITEM_CONTAINS_BLOCK
+					flags |= ListItemContainsBlock
 					p.block(&buf, ref.title)
 				} else {
 					p.inline(&buf, ref.title)
 				}
 				p.r.FootnoteItem(&output, ref.link, buf.Bytes(), flags)
-				flags &^= LIST_ITEM_BEGINNING_OF_LIST | LIST_ITEM_CONTAINS_BLOCK
+				flags &^= ListItemBeginningOfList | ListItemContainsBlock
 			}
 
 			return true
@@ -460,7 +453,7 @@ func isReference(p *parser, data []byte, tabSize int) int {
 		return 0
 	}
 	i++
-	if p.flags&EXTENSION_FOOTNOTES != 0 {
+	if p.flags&Footnotes != 0 {
 		if data[i] == '^' {
 			// we can set it to anything here because the proper noteIds will
 			// be assigned later during the second pass. It just has to be != 0
@@ -507,7 +500,7 @@ func isReference(p *parser, data []byte, tabSize int) int {
 		hasBlock              bool
 	)
 
-	if p.flags&EXTENSION_FOOTNOTES != 0 && noteId != 0 {
+	if p.flags&Footnotes != 0 && noteId != 0 {
 		linkOffset, linkEnd, raw, hasBlock = scanFootnote(p, data, i, tabSize)
 		lineEnd = linkEnd
 	} else {

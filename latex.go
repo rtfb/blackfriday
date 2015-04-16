@@ -34,7 +34,7 @@ func LatexRenderer(flags int) Renderer {
 	return &Latex{}
 }
 
-func (options *Latex) GetFlags() int {
+func (options *Latex) GetFlags() HtmlFlags {
 	return 0
 }
 
@@ -100,9 +100,9 @@ func (options *Latex) HRule(out *bytes.Buffer) {
 	out.WriteString("\n\\HRule\n")
 }
 
-func (options *Latex) List(out *bytes.Buffer, text func() bool, flags int) {
+func (options *Latex) List(out *bytes.Buffer, text func() bool, flags ListType) {
 	marker := out.Len()
-	if flags&LIST_TYPE_ORDERED != 0 {
+	if flags&ListTypeOrdered != 0 {
 		out.WriteString("\n\\begin{enumerate}\n")
 	} else {
 		out.WriteString("\n\\begin{itemize}\n")
@@ -111,14 +111,14 @@ func (options *Latex) List(out *bytes.Buffer, text func() bool, flags int) {
 		out.Truncate(marker)
 		return
 	}
-	if flags&LIST_TYPE_ORDERED != 0 {
+	if flags&ListTypeOrdered != 0 {
 		out.WriteString("\n\\end{enumerate}\n")
 	} else {
 		out.WriteString("\n\\end{itemize}\n")
 	}
 }
 
-func (options *Latex) ListItem(out *bytes.Buffer, text []byte, flags int) {
+func (options *Latex) ListItem(out *bytes.Buffer, text []byte, flags ListType) {
 	out.WriteString("\n\\item ")
 	out.Write(text)
 }
@@ -133,13 +133,13 @@ func (options *Latex) Paragraph(out *bytes.Buffer, text func() bool) {
 	out.WriteString("\n")
 }
 
-func (options *Latex) Table(out *bytes.Buffer, header []byte, body []byte, columnData []int) {
+func (options *Latex) Table(out *bytes.Buffer, header []byte, body []byte, columnData []TableFlags) {
 	out.WriteString("\n\\begin{tabular}{")
 	for _, elt := range columnData {
 		switch elt {
-		case TABLE_ALIGNMENT_LEFT:
+		case TableAlignmentLeft:
 			out.WriteByte('l')
-		case TABLE_ALIGNMENT_RIGHT:
+		case TableAlignmentRight:
 			out.WriteByte('r')
 		default:
 			out.WriteByte('c')
@@ -159,14 +159,14 @@ func (options *Latex) TableRow(out *bytes.Buffer, text []byte) {
 	out.Write(text)
 }
 
-func (options *Latex) TableHeaderCell(out *bytes.Buffer, text []byte, align int) {
+func (options *Latex) TableHeaderCell(out *bytes.Buffer, text []byte, align TableFlags) {
 	if out.Len() > 0 {
 		out.WriteString(" & ")
 	}
 	out.Write(text)
 }
 
-func (options *Latex) TableCell(out *bytes.Buffer, text []byte, align int) {
+func (options *Latex) TableCell(out *bytes.Buffer, text []byte, align TableFlags) {
 	if out.Len() > 0 {
 		out.WriteString(" & ")
 	}
@@ -178,13 +178,13 @@ func (options *Latex) Footnotes(out *bytes.Buffer, text func() bool) {
 
 }
 
-func (options *Latex) FootnoteItem(out *bytes.Buffer, name, text []byte, flags int) {
+func (options *Latex) FootnoteItem(out *bytes.Buffer, name, text []byte, flags ListType) {
 
 }
 
-func (options *Latex) AutoLink(out *bytes.Buffer, link []byte, kind int) {
+func (options *Latex) AutoLink(out *bytes.Buffer, link []byte, kind LinkType) {
 	out.WriteString("\\href{")
-	if kind == LINK_TYPE_EMAIL {
+	if kind == LinkTypeEmail {
 		out.WriteString("mailto:")
 	}
 	out.Write(link)
@@ -317,7 +317,7 @@ func (options *Latex) DocumentHeader(out *bytes.Buffer) {
 	out.WriteString("  pdfstartview=FitH,%\n")
 	out.WriteString("  breaklinks=true,%\n")
 	out.WriteString("  pdfauthor={Blackfriday Markdown Processor v")
-	out.WriteString(VERSION)
+	out.WriteString(Version)
 	out.WriteString("}}\n")
 	out.WriteString("\n")
 	out.WriteString("\\newcommand{\\HRule}{\\rule{\\linewidth}{0.5mm}}\n")

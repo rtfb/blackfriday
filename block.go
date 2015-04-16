@@ -63,7 +63,7 @@ func (p *parser) block(out *bytes.Buffer, data []byte) {
 		// % stuff
 		// % more stuff
 		// % even more stuff
-		if p.flags&EXTENSION_TITLEBLOCK != 0 {
+		if p.flags&Titleblock != 0 {
 			if data[0] == '%' {
 				if i := p.titleBlock(out, data, true); i > 0 {
 					data = data[i:]
@@ -101,7 +101,7 @@ func (p *parser) block(out *bytes.Buffer, data []byte) {
 		//     return n * fact(n-1)
 		// }
 		// ```
-		if p.flags&EXTENSION_FENCED_CODE != 0 {
+		if p.flags&FencedCode != 0 {
 			if i := p.fencedCode(out, data, true); i > 0 {
 				data = data[i:]
 				continue
@@ -139,7 +139,7 @@ func (p *parser) block(out *bytes.Buffer, data []byte) {
 		// ------|-----|---------
 		// Bob   | 31  | 555-1234
 		// Alice | 27  | 555-4321
-		if p.flags&EXTENSION_TABLES != 0 {
+		if p.flags&Tables != 0 {
 			if i := p.table(out, data); i > 0 {
 				data = data[i:]
 				continue
@@ -162,7 +162,7 @@ func (p *parser) block(out *bytes.Buffer, data []byte) {
 		// 1. Item 1
 		// 2. Item 2
 		if p.oliPrefix(data) > 0 {
-			data = data[p.list(out, data, LIST_TYPE_ORDERED):]
+			data = data[p.list(out, data, ListTypeOrdered):]
 			continue
 		}
 
@@ -179,7 +179,7 @@ func (p *parser) isPrefixHeader(data []byte) bool {
 		return false
 	}
 
-	if p.flags&EXTENSION_SPACE_HEADERS != 0 {
+	if p.flags&SpaceHeaders != 0 {
 		level := 0
 		for level < 6 && data[level] == '#' {
 			level++
@@ -203,7 +203,7 @@ func (p *parser) prefixHeader(out *bytes.Buffer, data []byte) int {
 	}
 	skip := end
 	id := ""
-	if p.flags&EXTENSION_HEADER_IDS != 0 {
+	if p.flags&HeaderIDs != 0 {
 		j, k := 0, 0
 		// find start/end of header id
 		for j = i; j < end-1 && (data[j] != '{' || data[j+1] != '#'); j++ {
@@ -227,7 +227,7 @@ func (p *parser) prefixHeader(out *bytes.Buffer, data []byte) int {
 		end--
 	}
 	if end > i {
-		if id == "" && p.flags&EXTENSION_AUTO_HEADER_IDS != 0 {
+		if id == "" && p.flags&AutoHeaderIDs != 0 {
 			id = sanitized_anchor_name.Create(string(data[i:end]))
 		}
 		work := func() bool {
@@ -496,7 +496,7 @@ func (p *parser) htmlFindEnd(tag string, data []byte) int {
 		return i
 	}
 
-	if p.flags&EXTENSION_LAX_HTML_BLOCKS != 0 {
+	if p.flags&LaxHTMLBlocks != 0 {
 		return i
 	}
 	if skip = p.isEmpty(data[i:]); skip == 0 {
@@ -742,7 +742,7 @@ func isBackslashEscaped(data []byte, i int) bool {
 	return backslashes&1 == 1
 }
 
-func (p *parser) tableHeader(out *bytes.Buffer, data []byte) (size int, columns []int) {
+func (p *parser) tableHeader(out *bytes.Buffer, data []byte) (size int, columns []TableFlags) {
 	i := 0
 	colCount := 1
 	for i = 0; data[i] != '\n'; i++ {
@@ -767,7 +767,7 @@ func (p *parser) tableHeader(out *bytes.Buffer, data []byte) (size int, columns 
 		colCount--
 	}
 
-	columns = make([]int, colCount)
+	columns = make([]TableFlags, colCount)
 
 	// move on to the header underline
 	i++
@@ -790,7 +790,7 @@ func (p *parser) tableHeader(out *bytes.Buffer, data []byte) (size int, columns 
 
 		if data[i] == ':' {
 			i++
-			columns[col] |= TABLE_ALIGNMENT_LEFT
+			columns[col] |= TableAlignmentLeft
 			dashes++
 		}
 		for data[i] == '-' {
@@ -799,7 +799,7 @@ func (p *parser) tableHeader(out *bytes.Buffer, data []byte) (size int, columns 
 		}
 		if data[i] == ':' {
 			i++
-			columns[col] |= TABLE_ALIGNMENT_RIGHT
+			columns[col] |= TableAlignmentRight
 			dashes++
 		}
 		for data[i] == ' ' {
@@ -847,7 +847,7 @@ func (p *parser) tableHeader(out *bytes.Buffer, data []byte) (size int, columns 
 	return
 }
 
-func (p *parser) tableRow(out *bytes.Buffer, data []byte, columns []int, header bool) {
+func (p *parser) tableRow(out *bytes.Buffer, data []byte, columns []TableFlags, header bool) {
 	i, col := 0, 0
 	var rowWork bytes.Buffer
 
@@ -1040,18 +1040,18 @@ func (p *parser) oliPrefix(data []byte) int {
 }
 
 // parse ordered or unordered list block
-func (p *parser) list(out *bytes.Buffer, data []byte, flags int) int {
+func (p *parser) list(out *bytes.Buffer, data []byte, flags ListType) int {
 	i := 0
-	flags |= LIST_ITEM_BEGINNING_OF_LIST
+	flags |= ListItemBeginningOfList
 	work := func() bool {
 		for i < len(data) {
 			skip := p.listItem(out, data[i:], &flags)
 			i += skip
 
-			if skip == 0 || flags&LIST_ITEM_END_OF_LIST != 0 {
+			if skip == 0 || flags&ListItemEndOfList != 0 {
 				break
 			}
-			flags &= ^LIST_ITEM_BEGINNING_OF_LIST
+			flags &= ^ListItemBeginningOfList
 		}
 		return true
 	}
@@ -1062,7 +1062,7 @@ func (p *parser) list(out *bytes.Buffer, data []byte, flags int) int {
 
 // Parse a single list item.
 // Assumes initial prefix is already removed if this is a sublist.
-func (p *parser) listItem(out *bytes.Buffer, data []byte, flags *int) int {
+func (p *parser) listItem(out *bytes.Buffer, data []byte, flags *ListType) int {
 	// keep track of the indentation of the first line
 	itemIndent := 0
 	for itemIndent < 3 && data[itemIndent] == ' ' {
@@ -1131,7 +1131,7 @@ gatherlines:
 			p.oliPrefix(chunk) > 0:
 
 			if containsBlankLine {
-				*flags |= LIST_ITEM_CONTAINS_BLOCK
+				*flags |= ListItemContainsBlock
 			}
 
 			// to be a nested list, it must be indented more
@@ -1150,22 +1150,22 @@ gatherlines:
 			// if the header is not indented, it is not nested in the list
 			// and thus ends the list
 			if containsBlankLine && indent < 4 {
-				*flags |= LIST_ITEM_END_OF_LIST
+				*flags |= ListItemEndOfList
 				break gatherlines
 			}
-			*flags |= LIST_ITEM_CONTAINS_BLOCK
+			*flags |= ListItemContainsBlock
 
 		// anything following an empty line is only part
 		// of this item if it is indented 4 spaces
 		// (regardless of the indentation of the beginning of the item)
 		case containsBlankLine && indent < 4:
-			*flags |= LIST_ITEM_END_OF_LIST
+			*flags |= ListItemEndOfList
 			break gatherlines
 
 		// a blank line means this should be parsed as a block
 		case containsBlankLine:
 			raw.WriteByte('\n')
-			*flags |= LIST_ITEM_CONTAINS_BLOCK
+			*flags |= ListItemContainsBlock
 		}
 
 		// if this line was preceeded by one or more blanks,
@@ -1185,7 +1185,7 @@ gatherlines:
 
 	// render the contents of the list item
 	var cooked bytes.Buffer
-	if *flags&LIST_ITEM_CONTAINS_BLOCK != 0 {
+	if *flags&ListItemContainsBlock != 0 {
 		// intermediate render of block li
 		if sublist > 0 {
 			p.block(&cooked, rawBytes[:sublist])
@@ -1287,7 +1287,7 @@ func (p *parser) paragraph(out *bytes.Buffer, data []byte) int {
 				}(out, p, data[prev:eol])
 
 				id := ""
-				if p.flags&EXTENSION_AUTO_HEADER_IDS != 0 {
+				if p.flags&AutoHeaderIDs != 0 {
 					id = sanitized_anchor_name.Create(string(data[prev:eol]))
 				}
 
@@ -1302,7 +1302,7 @@ func (p *parser) paragraph(out *bytes.Buffer, data []byte) int {
 		}
 
 		// if the next line starts a block of HTML, then the paragraph ends here
-		if p.flags&EXTENSION_LAX_HTML_BLOCKS != 0 {
+		if p.flags&LaxHTMLBlocks != 0 {
 			if data[i] == '<' && p.html(out, current, false) > 0 {
 				// rewind to before the HTML block
 				p.renderParagraph(out, data[:i])
@@ -1317,7 +1317,7 @@ func (p *parser) paragraph(out *bytes.Buffer, data []byte) int {
 		}
 
 		// if there's a list after this, paragraph is over
-		if p.flags&EXTENSION_NO_EMPTY_LINE_BEFORE_BLOCK != 0 {
+		if p.flags&NoEmptyLineBeforeBlock != 0 {
 			if p.uliPrefix(current) != 0 ||
 				p.oliPrefix(current) != 0 ||
 				p.quotePrefix(current) != 0 ||

@@ -20,14 +20,10 @@ import (
 	"strings"
 )
 
-func runMarkdownInline(input string, extensions, htmlFlags int, params HtmlRendererParameters) string {
-	extensions |= EXTENSION_AUTOLINK
-	extensions |= EXTENSION_STRIKETHROUGH
-
-	htmlFlags |= HTML_USE_XHTML
-
-	renderer := HtmlRendererWithParameters(htmlFlags, "", "", params)
-
+func runMarkdownInline(input string, extensions Extensions, htmlFlags HtmlFlags, params HtmlRendererParameters) string {
+	extensions |= Autolink
+	extensions |= Strikethrough
+	renderer := HtmlRendererWithParameters(htmlFlags|UseXHTML, "", "", params)
 	return string(Markdown([]byte(input), renderer, extensions))
 }
 
@@ -42,22 +38,22 @@ func doLinkTestsInline(t *testing.T, tests []string) {
 	params := HtmlRendererParameters{AbsolutePrefix: prefix}
 	transformTests := transformLinks(tests, prefix)
 	doTestsInlineParam(t, transformTests, 0, 0, params)
-	doTestsInlineParam(t, transformTests, 0, int(commonHtmlFlags), params)
+	doTestsInlineParam(t, transformTests, 0, commonHtmlFlags, params)
 }
 
 func doSafeTestsInline(t *testing.T, tests []string) {
-	doTestsInlineParam(t, tests, 0, HTML_SAFELINK, HtmlRendererParameters{})
+	doTestsInlineParam(t, tests, 0, Safelink, HtmlRendererParameters{})
 
 	// All the links in this test should not have the prefix appended, so
 	// just rerun it with different parameters and the same expectations.
 	prefix := "http://localhost"
 	params := HtmlRendererParameters{AbsolutePrefix: prefix}
 	transformTests := transformLinks(tests, prefix)
-	doTestsInlineParam(t, transformTests, 0, HTML_SAFELINK, params)
+	doTestsInlineParam(t, transformTests, 0, Safelink, params)
 }
 
-func doTestsInlineParam(t *testing.T, tests []string, extensions, htmlFlags int,
-	params HtmlRendererParameters) {
+func doTestsInlineParam(t *testing.T, tests []string, extensions Extensions,
+	htmlFlags HtmlFlags, params HtmlRendererParameters) {
 	// catch and report panics
 	var candidate string
 	/*
@@ -453,7 +449,7 @@ func TestRelAttrLink(t *testing.T) {
 		"[foo](/bar/)\n",
 		"<p><a href=\"/bar/\">foo</a></p>\n",
 	}
-	doTestsInlineParam(t, nofollowTests, 0, HTML_SAFELINK|HTML_NOFOLLOW_LINKS,
+	doTestsInlineParam(t, nofollowTests, 0, Safelink|NofollowLinks,
 		HtmlRendererParameters{})
 
 	var noreferrerTests = []string{
@@ -463,7 +459,7 @@ func TestRelAttrLink(t *testing.T) {
 		"[foo](/bar/)\n",
 		"<p><a href=\"/bar/\">foo</a></p>\n",
 	}
-	doTestsInlineParam(t, noreferrerTests, 0, HTML_SAFELINK|HTML_NOREFERRER_LINKS,
+	doTestsInlineParam(t, noreferrerTests, 0, Safelink|NoreferrerLinks,
 		HtmlRendererParameters{})
 
 	var nofollownoreferrerTests = []string{
@@ -473,8 +469,8 @@ func TestRelAttrLink(t *testing.T) {
 		"[foo](/bar/)\n",
 		"<p><a href=\"/bar/\">foo</a></p>\n",
 	}
-	doTestsInlineParam(t, nofollownoreferrerTests, 0, HTML_SAFELINK|HTML_NOFOLLOW_LINKS|HTML_NOREFERRER_LINKS,
-		HtmlRendererParameters{})
+	doTestsInlineParam(t, nofollownoreferrerTests, 0,
+		Safelink|NofollowLinks|NoreferrerLinks, HtmlRendererParameters{})
 }
 
 func TestHrefTargetBlank(t *testing.T) {
@@ -486,7 +482,7 @@ func TestHrefTargetBlank(t *testing.T) {
 		"[foo](http://example.com)\n",
 		"<p><a href=\"http://example.com\" target=\"_blank\">foo</a></p>\n",
 	}
-	doTestsInlineParam(t, tests, 0, HTML_SAFELINK|HTML_HREF_TARGET_BLANK, HtmlRendererParameters{})
+	doTestsInlineParam(t, tests, 0, Safelink|HrefTargetBlank, HtmlRendererParameters{})
 }
 
 func TestSafeInlineLink(t *testing.T) {
@@ -814,7 +810,7 @@ what happens here
 }
 
 func TestFootnotes(t *testing.T) {
-	doTestsInlineParam(t, footnoteTests, EXTENSION_FOOTNOTES, 0, HtmlRendererParameters{})
+	doTestsInlineParam(t, footnoteTests, Footnotes, 0, HtmlRendererParameters{})
 }
 
 func TestFootnotesWithParameters(t *testing.T) {
@@ -839,7 +835,7 @@ func TestFootnotesWithParameters(t *testing.T) {
 		FootnoteReturnLinkContents: returnText,
 	}
 
-	doTestsInlineParam(t, tests, EXTENSION_FOOTNOTES, HTML_FOOTNOTE_RETURN_LINKS, params)
+	doTestsInlineParam(t, tests, Footnotes, FootnoteReturnLinks, params)
 }
 
 func TestSmartDoubleQuotes(t *testing.T) {
@@ -851,7 +847,7 @@ func TestSmartDoubleQuotes(t *testing.T) {
 		"two pair of \"some\" quoted \"text\".\n",
 		"<p>two pair of &ldquo;some&rdquo; quoted &ldquo;text&rdquo;.</p>\n"}
 
-	doTestsInlineParam(t, tests, 0, HTML_USE_SMARTYPANTS, HtmlRendererParameters{})
+	doTestsInlineParam(t, tests, 0, UseSmartypants, HtmlRendererParameters{})
 }
 
 func TestSmartAngledDoubleQuotes(t *testing.T) {
@@ -863,7 +859,7 @@ func TestSmartAngledDoubleQuotes(t *testing.T) {
 		"two pair of \"some\" quoted \"text\".\n",
 		"<p>two pair of &laquo;some&raquo; quoted &laquo;text&raquo;.</p>\n"}
 
-	doTestsInlineParam(t, tests, 0, HTML_USE_SMARTYPANTS|HTML_SMARTYPANTS_ANGLED_QUOTES, HtmlRendererParameters{})
+	doTestsInlineParam(t, tests, 0, UseSmartypants|SmartypantsAngledQuotes, HtmlRendererParameters{})
 }
 
 func TestSmartFractions(t *testing.T) {
@@ -873,7 +869,7 @@ func TestSmartFractions(t *testing.T) {
 		"1/2/2015, 1/4/2015, 3/4/2015; 2015/1/2, 2015/1/4, 2015/3/4.\n",
 		"<p>1/2/2015, 1/4/2015, 3/4/2015; 2015/1/2, 2015/1/4, 2015/3/4.</p>\n"}
 
-	doTestsInlineParam(t, tests, 0, HTML_USE_SMARTYPANTS, HtmlRendererParameters{})
+	doTestsInlineParam(t, tests, 0, UseSmartypants, HtmlRendererParameters{})
 
 	tests = []string{
 		"1/2, 2/3, 81/100 and 1000000/1048576.\n",
@@ -881,5 +877,5 @@ func TestSmartFractions(t *testing.T) {
 		"1/2/2015, 1/4/2015, 3/4/2015; 2015/1/2, 2015/1/4, 2015/3/4.\n",
 		"<p>1/2/2015, 1/4/2015, 3/4/2015; 2015/1/2, 2015/1/4, 2015/3/4.</p>\n"}
 
-	doTestsInlineParam(t, tests, 0, HTML_USE_SMARTYPANTS|HTML_SMARTYPANTS_FRACTIONS, HtmlRendererParameters{})
+	doTestsInlineParam(t, tests, 0, UseSmartypants|SmartypantsFractions, HtmlRendererParameters{})
 }
