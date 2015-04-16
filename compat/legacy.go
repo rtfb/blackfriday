@@ -75,3 +75,24 @@ const (
 	HTML_SMARTYPANTS_ANGLED_QUOTES = int(SmartypantsAngledQuotes)
 	HTML_FOOTNOTE_RETURN_LINKS     = int(FootnoteReturnLinks)
 )
+
+func MarkdownBasic(input []byte) []byte {
+	// set up the HTML renderer
+	htmlFlags := HTML_USE_XHTML
+	renderer := HtmlRenderer(htmlFlags, "", "")
+
+	// set up the parser
+	extensions := 0
+
+	return Markdown(input, renderer, extensions)
+}
+
+func MarkdownCommon(input []byte) []byte {
+	// set up the HTML renderer
+	renderer := HtmlRenderer(commonHtmlFlags, "", "")
+	return Markdown(input, renderer, commonExtensions)
+}
+
+func Markdown(input []byte, renderer Renderer, extensions int) []byte {
+	return nil
+}
