@@ -242,8 +242,8 @@ func MarkdownBasic(input []byte) []byte {
 // * Custom Header IDs
 func MarkdownCommon(input []byte) []byte {
 	// set up the HTML renderer
-	renderer := HtmlRenderer(int(commonHtmlFlags), "", "")
-	return Markdown(input, renderer, int(commonExtensions))
+	renderer := HtmlRenderer(commonHtmlFlags, "", "")
+	return Markdown(input, renderer, commonExtensions)
 }
 
 // Markdown is the main rendering function.
