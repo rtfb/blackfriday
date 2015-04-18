@@ -14,8 +14,7 @@
 package compat
 
 import (
-	//"github.com/russross/blackfriday"
-	".."
+	"gopkg.in/rtfb/blackfriday.v2"
 )
 
 const VERSION = blackfriday.Version
