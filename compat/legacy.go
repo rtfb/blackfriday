@@ -91,3 +91,15 @@ func MarkdownCommon(input []byte) []byte {
 func Markdown(input []byte, renderer blackfriday.Renderer, extensions int) []byte {
 	return blackfriday.Markdown(input, renderer, blackfriday.Extensions(extensions))
 }
+
+func HtmlRenderer(flags int, title string, css string) blackfriday.Renderer {
+	return blackfriday.HtmlRendererWithParameters(blackfriday.HtmlFlags(flags),
+		title, css, blackfriday.HtmlRendererParameters{})
+}
+
+func HtmlRendererWithParameters(flags int, title string,
+	css string,
+	renderParameters blackfriday.HtmlRendererParameters) blackfriday.Renderer {
+	return blackfriday.HtmlRendererWithParameters(blackfriday.HtmlFlags(flags),
+		title, css, renderParameters)
+}
