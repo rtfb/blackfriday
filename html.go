@@ -201,8 +201,7 @@ func (options *Html) TitleBlock(out *bytes.Buffer, text []byte) {
 	out.WriteString("\n</h1>")
 }
 
-func (options *Html) Header(out *bytes.Buffer, text func() bool, level int, id string) {
-	marker := out.Len()
+func (options *Html) Header(out *bytes.Buffer, text func(), level int, id string) {
 	doubleSpace(out)
 
 	if id == "" && options.flags&Toc != 0 {
@@ -226,11 +225,7 @@ func (options *Html) Header(out *bytes.Buffer, text func() bool, level int, id s
 	}
 
 	tocMarker := out.Len()
-	if !text() {
-		out.Truncate(marker)
-		return
-	}
-
+	text()
 	// are we building a table of contents?
 	if options.flags&Toc != 0 {
 		options.TocHeaderWithAnchor(out.Bytes()[tocMarker:], level, id)
@@ -343,7 +338,7 @@ func (options *Html) TableCell(out *bytes.Buffer, text []byte, align TableFlags)
 	out.WriteString("</td>")
 }
 
-func (options *Html) Footnotes(out *bytes.Buffer, text func() bool) {
+func (options *Html) Footnotes(out *bytes.Buffer, text func()) {
 	out.WriteString("<div class=\"footnotes\">\n")
 	options.HRule(out)
 	options.List(out, text, ListTypeOrdered)
@@ -373,8 +368,7 @@ func (options *Html) FootnoteItem(out *bytes.Buffer, name, text []byte, flags Li
 	out.WriteString("</li>\n")
 }
 
-func (options *Html) List(out *bytes.Buffer, text func() bool, flags ListType) {
-	marker := out.Len()
+func (options *Html) List(out *bytes.Buffer, text func(), flags ListType) {
 	doubleSpace(out)
 
 	if flags&ListTypeOrdered != 0 {
@@ -382,10 +376,7 @@ func (options *Html) List(out *bytes.Buffer, text func() bool, flags ListType) {
 	} else {
 		out.WriteString("<ul>")
 	}
-	if !text() {
-		out.Truncate(marker)
-		return
-	}
+	text()
 	if flags&ListTypeOrdered != 0 {
 		out.WriteString("</ol>\n")
 	} else {
@@ -402,15 +393,11 @@ func (options *Html) ListItem(out *bytes.Buffer, text []byte, flags ListType) {
 	out.WriteString("</li>\n")
 }
 
-func (options *Html) Paragraph(out *bytes.Buffer, text func() bool) {
-	marker := out.Len()
+func (options *Html) Paragraph(out *bytes.Buffer, text func()) {
 	doubleSpace(out)
 
 	out.WriteString("<p>")
-	if !text() {
-		out.Truncate(marker)
-		return
-	}
+	text()
 	out.WriteString("</p>\n")
 }
 

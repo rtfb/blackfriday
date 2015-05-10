@@ -103,3 +103,45 @@ func HtmlRendererWithParameters(flags int, title string,
 	return blackfriday.HtmlRendererWithParameters(blackfriday.HtmlFlags(flags),
 		title, css, renderParameters)
 }
+
+type Renderer interface {
+	// block-level callbacks
+	BlockCode(out *bytes.Buffer, text []byte, lang string)
+	BlockQuote(out *bytes.Buffer, text []byte)
+	BlockHtml(out *bytes.Buffer, text []byte)
+	Header(out *bytes.Buffer, text func() bool, level int, id string)
+	HRule(out *bytes.Buffer)
+	List(out *bytes.Buffer, text func() bool, flags ListType)
+	ListItem(out *bytes.Buffer, text []byte, flags ListType)
+	Paragraph(out *bytes.Buffer, text func() bool)
+	Table(out *bytes.Buffer, header []byte, body []byte, columnData []TableFlags)
+	TableRow(out *bytes.Buffer, text []byte)
+	TableHeaderCell(out *bytes.Buffer, text []byte, flags TableFlags)
+	TableCell(out *bytes.Buffer, text []byte, flags TableFlags)
+	Footnotes(out *bytes.Buffer, text func() bool)
+	FootnoteItem(out *bytes.Buffer, name, text []byte, flags ListType)
+	TitleBlock(out *bytes.Buffer, text []byte)
+
+	// Span-level callbacks
+	AutoLink(out *bytes.Buffer, link []byte, kind LinkType)
+	CodeSpan(out *bytes.Buffer, text []byte)
+	DoubleEmphasis(out *bytes.Buffer, text []byte)
+	Emphasis(out *bytes.Buffer, text []byte)
+	Image(out *bytes.Buffer, link []byte, title []byte, alt []byte)
+	LineBreak(out *bytes.Buffer)
+	Link(out *bytes.Buffer, link []byte, title []byte, content []byte)
+	RawHtmlTag(out *bytes.Buffer, tag []byte)
+	TripleEmphasis(out *bytes.Buffer, text []byte)
+	StrikeThrough(out *bytes.Buffer, text []byte)
+	FootnoteRef(out *bytes.Buffer, ref []byte, id int)
+
+	// Low-level callbacks
+	Entity(out *bytes.Buffer, entity []byte)
+	NormalText(out *bytes.Buffer, text []byte)
+
+	// Header and footer
+	DocumentHeader(out *bytes.Buffer)
+	DocumentFooter(out *bytes.Buffer)
+
+	GetFlags() HtmlFlags
+}
