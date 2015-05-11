@@ -342,7 +342,9 @@ func (options *Html) TableCell(out *bytes.Buffer, text []byte, align TableFlags)
 func (options *Html) Footnotes(out *bytes.Buffer, text func()) {
 	out.WriteString("<div class=\"footnotes\">\n")
 	options.HRule(out)
-	options.List(out, text, ListTypeOrdered)
+	options.BeginList(out, ListTypeOrdered)
+	text()
+	options.EndList(out, ListTypeOrdered)
 	out.WriteString("</div>\n")
 }
 
@@ -369,15 +371,16 @@ func (options *Html) FootnoteItem(out *bytes.Buffer, name, text []byte, flags Li
 	out.WriteString("</li>\n")
 }
 
-func (options *Html) List(out *bytes.Buffer, text func(), flags ListType) {
+func (r *Html) BeginList(out *bytes.Buffer, flags ListType) {
 	doubleSpace(out)
-
 	if flags&ListTypeOrdered != 0 {
 		out.WriteString("<ol>")
 	} else {
 		out.WriteString("<ul>")
 	}
-	text()
+}
+
+func (r *Html) EndList(out *bytes.Buffer, flags ListType) {
 	if flags&ListTypeOrdered != 0 {
 		out.WriteString("</ol>\n")
 	} else {

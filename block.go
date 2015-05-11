@@ -1041,19 +1041,17 @@ func (p *parser) oliPrefix(data []byte) int {
 func (p *parser) list(out *bytes.Buffer, data []byte, flags ListType) int {
 	i := 0
 	flags |= ListItemBeginningOfList
-	work := func() {
-		for i < len(data) {
-			skip := p.listItem(out, data[i:], &flags)
-			i += skip
+	p.r.BeginList(out, flags)
+	for i < len(data) {
+		skip := p.listItem(out, data[i:], &flags)
+		i += skip
 
-			if skip == 0 || flags&ListItemEndOfList != 0 {
-				break
-			}
-			flags &= ^ListItemBeginningOfList
+		if skip == 0 || flags&ListItemEndOfList != 0 {
+			break
 		}
+		flags &= ^ListItemBeginningOfList
 	}
-
-	p.r.List(out, work, flags)
+	p.r.EndList(out, flags)
 	return i
 }
 
