@@ -163,7 +163,8 @@ type Renderer interface {
 	TableRow(out *bytes.Buffer, text []byte)
 	TableHeaderCell(out *bytes.Buffer, text []byte, flags TableFlags)
 	TableCell(out *bytes.Buffer, text []byte, flags TableFlags)
-	Footnotes(out *bytes.Buffer, text func())
+	BeginFootnotes(out *bytes.Buffer)
+	EndFootnotes(out *bytes.Buffer)
 	FootnoteItem(out *bytes.Buffer, name, text []byte, flags ListType)
 	TitleBlock(out *bytes.Buffer, text []byte)
 
@@ -370,20 +371,20 @@ func secondPass(p *parser, input []byte) []byte {
 	p.block(&output, input)
 
 	if p.flags&Footnotes != 0 && len(p.notes) > 0 {
-		p.r.Footnotes(&output, func() {
-			flags := ListItemBeginningOfList
-			for _, ref := range p.notes {
-				var buf bytes.Buffer
-				if ref.hasBlock {
-					flags |= ListItemContainsBlock
-					p.block(&buf, ref.title)
-				} else {
-					p.inline(&buf, ref.title)
-				}
-				p.r.FootnoteItem(&output, ref.link, buf.Bytes(), flags)
-				flags &^= ListItemBeginningOfList | ListItemContainsBlock
+		p.r.BeginFootnotes(&output)
+		flags := ListItemBeginningOfList
+		for _, ref := range p.notes {
+			var buf bytes.Buffer
+			if ref.hasBlock {
+				flags |= ListItemContainsBlock
+				p.block(&buf, ref.title)
+			} else {
+				p.inline(&buf, ref.title)
 			}
-		})
+			p.r.FootnoteItem(&output, ref.link, buf.Bytes(), flags)
+			flags &^= ListItemBeginningOfList | ListItemContainsBlock
+		}
+		p.r.EndFootnotes(&output)
 	}
 
 	p.r.DocumentFooter(&output)

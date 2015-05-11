@@ -339,12 +339,14 @@ func (options *Html) TableCell(out *bytes.Buffer, text []byte, align TableFlags)
 	out.WriteString("</td>")
 }
 
-func (options *Html) Footnotes(out *bytes.Buffer, text func()) {
+func (r *Html) BeginFootnotes(out *bytes.Buffer) {
 	out.WriteString("<div class=\"footnotes\">\n")
-	options.HRule(out)
-	options.BeginList(out, ListTypeOrdered)
-	text()
-	options.EndList(out, ListTypeOrdered)
+	r.HRule(out)
+	r.BeginList(out, ListTypeOrdered)
+}
+
+func (r *Html) EndFootnotes(out *bytes.Buffer) {
+	r.EndList(out, ListTypeOrdered)
 	out.WriteString("</div>\n")
 }
 
