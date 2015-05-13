@@ -155,26 +155,29 @@ func codeSpan(p *parser, out *bytes.Buffer, data []byte, offset int) int {
 }
 
 // newline preceded by two spaces becomes <br>
-// newline without two spaces works when EXTENSION_HARD_LINE_BREAK is enabled
+func maybeLineBreak(p *parser, out *bytes.Buffer, data []byte, offset int) int {
+	origOffset := offset
+	for offset < len(data) && data[offset] == ' ' {
+		offset++
+	}
+	if offset < len(data) && data[offset] == '\n' {
+		if offset-origOffset >= 2 {
+			p.r.LineBreak(out)
+			return offset - origOffset + 1
+		}
+		return offset - origOffset
+	}
+	return 0
+}
+
+// newline without preceding spaces works when extension HardLineBreak is enabled
 func lineBreak(p *parser, out *bytes.Buffer, data []byte, offset int) int {
-	// remove trailing spaces from out
-	outBytes := out.Bytes()
-	end := len(outBytes)
-	eol := end
-	for eol > 0 && outBytes[eol-1] == ' ' {
-		eol--
-	}
-	out.Truncate(eol)
-
-	precededByTwoSpaces := offset >= 2 && data[offset-2] == ' ' && data[offset-1] == ' '
-
 	// should there be a hard line break here?
-	if p.flags&HardLineBreak == 0 && !precededByTwoSpaces {
-		return 0
+	if p.flags&HardLineBreak != 0 {
+		p.r.LineBreak(out)
+		return 1
 	}
-
-	p.r.LineBreak(out)
-	return 1
+	return 0
 }
 
 type linkType int
