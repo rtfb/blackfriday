@@ -283,6 +283,8 @@ func Markdown(input []byte, renderer Renderer, extensions Extensions) []byte {
 	p.inlineCallback['<'] = leftAngle
 	p.inlineCallback['\\'] = escape
 	p.inlineCallback['&'] = entity
+	p.inlineCallback['!'] = maybeImage
+	p.inlineCallback['^'] = maybeInlineFootnote
 
 	if extensions&Autolink != 0 {
 		p.inlineCallback[':'] = autoLink

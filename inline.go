@@ -186,6 +186,20 @@ const (
 	linkInlineFootnote
 )
 
+func maybeImage(p *parser, out *bytes.Buffer, data []byte, offset int) int {
+	if offset < len(data)-1 && data[offset+1] == '[' {
+		return link(p, out, data, offset)
+	}
+	return 0
+}
+
+func maybeInlineFootnote(p *parser, out *bytes.Buffer, data []byte, offset int) int {
+	if offset < len(data)-1 && data[offset+1] == '[' {
+		return link(p, out, data, offset)
+	}
+	return 0
+}
+
 // '[': parse a link or an image or a footnote
 func link(p *parser, out *bytes.Buffer, data []byte, offset int) int {
 	// no links allowed inside regular links, footnote, and deferred footnotes
@@ -198,10 +212,12 @@ func link(p *parser, out *bytes.Buffer, data []byte, offset int) int {
 	// ^[text] == inline footnote
 	// [^refId] == deferred footnote
 	var t linkType
-	if offset > 0 && data[offset-1] == '!' {
+	if offset >= 0 && data[offset] == '!' {
+		offset += 1
 		t = linkImg
 	} else if p.flags&Footnotes != 0 {
-		if offset > 0 && data[offset-1] == '^' {
+		if offset >= 0 && data[offset] == '^' {
+			offset += 1
 			t = linkInlineFootnote
 		} else if len(data)-1 > offset && data[offset+1] == '^' {
 			t = linkDeferredFootnote
@@ -508,22 +524,12 @@ func link(p *parser, out *bytes.Buffer, data []byte, offset int) int {
 		p.r.Link(out, uLink, title, content.Bytes())
 
 	case linkImg:
-		outSize := out.Len()
-		outBytes := out.Bytes()
-		if outSize > 0 && outBytes[outSize-1] == '!' {
-			out.Truncate(outSize - 1)
-		}
-
 		p.r.Image(out, uLink, title, content.Bytes())
+		i += 1
 
 	case linkInlineFootnote:
-		outSize := out.Len()
-		outBytes := out.Bytes()
-		if outSize > 0 && outBytes[outSize-1] == '^' {
-			out.Truncate(outSize - 1)
-		}
-
 		p.r.FootnoteRef(out, link, noteId)
+		i += 1
 
 	case linkDeferredFootnote:
 		p.r.FootnoteRef(out, link, noteId)
