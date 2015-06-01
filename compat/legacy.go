@@ -14,6 +14,8 @@
 package compat
 
 import (
+	"bytes"
+
 	"gopkg.in/rtfb/blackfriday.v2"
 )
 
@@ -111,19 +113,19 @@ type Renderer interface {
 	BlockHtml(out *bytes.Buffer, text []byte)
 	Header(out *bytes.Buffer, text func() bool, level int, id string)
 	HRule(out *bytes.Buffer)
-	List(out *bytes.Buffer, text func() bool, flags ListType)
-	ListItem(out *bytes.Buffer, text []byte, flags ListType)
+	List(out *bytes.Buffer, text func() bool, flags int)
+	ListItem(out *bytes.Buffer, text []byte, flags int)
 	Paragraph(out *bytes.Buffer, text func() bool)
-	Table(out *bytes.Buffer, header []byte, body []byte, columnData []TableFlags)
+	Table(out *bytes.Buffer, header []byte, body []byte, columnData []int)
 	TableRow(out *bytes.Buffer, text []byte)
-	TableHeaderCell(out *bytes.Buffer, text []byte, flags TableFlags)
-	TableCell(out *bytes.Buffer, text []byte, flags TableFlags)
+	TableHeaderCell(out *bytes.Buffer, text []byte, flags int)
+	TableCell(out *bytes.Buffer, text []byte, flags int)
 	Footnotes(out *bytes.Buffer, text func() bool)
-	FootnoteItem(out *bytes.Buffer, name, text []byte, flags ListType)
+	FootnoteItem(out *bytes.Buffer, name, text []byte, flags int)
 	TitleBlock(out *bytes.Buffer, text []byte)
 
 	// Span-level callbacks
-	AutoLink(out *bytes.Buffer, link []byte, kind LinkType)
+	AutoLink(out *bytes.Buffer, link []byte, kind int)
 	CodeSpan(out *bytes.Buffer, text []byte)
 	DoubleEmphasis(out *bytes.Buffer, text []byte)
 	Emphasis(out *bytes.Buffer, text []byte)
@@ -143,5 +145,5 @@ type Renderer interface {
 	DocumentHeader(out *bytes.Buffer)
 	DocumentFooter(out *bytes.Buffer)
 
-	GetFlags() HtmlFlags
+	GetFlags() int
 }
