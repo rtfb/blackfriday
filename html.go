@@ -18,6 +18,7 @@ package blackfriday
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -95,6 +96,7 @@ type Html struct {
 	headerIDs map[string]int
 
 	smartypants *smartypantsRenderer
+	w           io.Writer
 }
 
 const (
@@ -113,6 +115,53 @@ func HtmlRenderer(flags HtmlFlags, title string, css string) Renderer {
 	return HtmlRendererWithParameters(flags, title, css, HtmlRendererParameters{})
 }
 
+type HtmlWriter struct {
+	buff  bytes.Buffer
+	dirty bool
+}
+
+func (w HtmlWriter) Write(p []byte) (n int, err error) {
+	w.dirty = true
+	if w.capture != nil {
+		w.capture.Write(p)
+	}
+	return w.buff.Write(p)
+}
+
+func (w HtmlWriter) WriteString(s string) (n int, err error) {
+	w.dirty = true
+	if w.capture != nil {
+		w.capture.WriteString(s)
+	}
+	return w.buff.WriteString(s)
+}
+
+func (w HtmlWriter) WriteByte(b byte) (n int, err error) {
+	w.dirty = true
+	if w.capture != nil {
+		w.capture.WriteByte(b)
+	}
+	return w.buff.WriteByte(b)
+}
+
+// replaces obscurely named doubleSpace()
+func (w HtmlWriter) newline() {
+	if w.dirty {
+		if w.capture != nil {
+			w.capture.WriteString(s)
+		}
+		w.buff.WriteByte('\n')
+	}
+}
+
+func (r *Html) captureWrites(processor func()) []byte {
+	var buff bytes.Buffer
+	r.w.capture = &buff
+	processor()
+	r.w.capture = nil
+	return buff.Bytes()
+}
+
 func HtmlRendererWithParameters(flags HtmlFlags, title string,
 	css string, renderParameters HtmlRendererParameters) Renderer {
 	// configure the rendering engine
@@ -124,21 +173,19 @@ func HtmlRendererWithParameters(flags HtmlFlags, title string,
 	if renderParameters.FootnoteReturnLinkContents == "" {
 		renderParameters.FootnoteReturnLinkContents = `<sup>[return]</sup>`
 	}
-
+	var writer HtmlWriter
 	return &Html{
-		flags:      flags,
-		closeTag:   closeTag,
-		title:      title,
-		css:        css,
-		parameters: renderParameters,
-
+		flags:        flags,
+		closeTag:     closeTag,
+		title:        title,
+		css:          css,
+		parameters:   renderParameters,
 		headerCount:  0,
 		currentLevel: 0,
 		toc:          new(bytes.Buffer),
-
-		headerIDs: make(map[string]int),
-
-		smartypants: smartypants(flags),
+		headerIDs:    make(map[string]int),
+		smartypants:  smartypants(flags),
+		w:            writer,
 	}
 }
 
@@ -162,47 +209,47 @@ func escapeSingleChar(char byte) (string, bool) {
 	return "", false
 }
 
-func attrEscape(out *bytes.Buffer, src []byte) {
+func (r *Html) attrEscape(src []byte) {
 	org := 0
 	for i, ch := range src {
 		if entity, ok := escapeSingleChar(ch); ok {
 			if i > org {
 				// copy all the normal characters since the last escape
-				out.Write(src[org:i])
+				r.w.Write(src[org:i])
 			}
 			org = i + 1
-			out.WriteString(entity)
+			r.w.WriteString(entity)
 		}
 	}
 	if org < len(src) {
-		out.Write(src[org:])
+		r.w.Write(src[org:])
 	}
 }
 
-func entityEscapeWithSkip(out *bytes.Buffer, src []byte, skipRanges [][]int) {
+func (r *Html) entityEscapeWithSkip(src []byte, skipRanges [][]int) {
 	end := 0
 	for _, rang := range skipRanges {
-		attrEscape(out, src[end:rang[0]])
-		out.Write(src[rang[0]:rang[1]])
+		r.attrEscape(src[end:rang[0]])
+		r.w.Write(src[rang[0]:rang[1]])
 		end = rang[1]
 	}
-	attrEscape(out, src[end:])
+	r.attrEscape(src[end:])
 }
 
 func (r *Html) GetFlags() HtmlFlags {
 	return r.flags
 }
 
-func (r *Html) TitleBlock(out *bytes.Buffer, text []byte) {
+func (r *Html) TitleBlock(text []byte) {
 	text = bytes.TrimPrefix(text, []byte("% "))
 	text = bytes.Replace(text, []byte("\n% "), []byte("\n"), -1)
-	out.WriteString("<h1 class=\"title\">")
-	out.Write(text)
-	out.WriteString("\n</h1>")
+	r.w.WriteString("<h1 class=\"title\">")
+	r.w.Write(text)
+	r.w.WriteString("\n</h1>")
 }
 
-func (r *Html) BeginHeader(out *bytes.Buffer, level int, id string) int {
-	doubleSpace(out)
+func (r *Html) BeginHeader(level int, id string) {
+	r.w.newline()
 
 	if id == "" && r.flags&Toc != 0 {
 		id = fmt.Sprintf("toc_%d", r.headerCount)
@@ -219,40 +266,37 @@ func (r *Html) BeginHeader(out *bytes.Buffer, level int, id string) int {
 			id = id + r.parameters.HeaderIDSuffix
 		}
 
-		out.WriteString(fmt.Sprintf("<h%d id=\"%s\">", level, id))
+		r.w.WriteString(fmt.Sprintf("<h%d id=\"%s\">", level, id))
 	} else {
-		out.WriteString(fmt.Sprintf("<h%d>", level))
+		r.w.WriteString(fmt.Sprintf("<h%d>", level))
 	}
-
-	return out.Len()
 }
 
-func (r *Html) EndHeader(out *bytes.Buffer, level int, id string, tocMarker int) {
+func (r *Html) EndHeader(level int, id string, header []byte) {
 	// are we building a table of contents?
 	if r.flags&Toc != 0 {
-		r.TocHeaderWithAnchor(out.Bytes()[tocMarker:], level, id)
+		r.TocHeaderWithAnchor(header, level, id)
 	}
-	out.WriteString(fmt.Sprintf("</h%d>\n", level))
+	r.w.WriteString(fmt.Sprintf("</h%d>\n", level))
 }
 
-func (r *Html) BlockHtml(out *bytes.Buffer, text []byte) {
+func (r *Html) BlockHtml(text []byte) {
 	if r.flags&SkipHTML != 0 {
 		return
 	}
-
-	doubleSpace(out)
-	out.Write(text)
-	out.WriteByte('\n')
+	r.w.newline()
+	r.w.Write(text)
+	r.w.WriteByte('\n')
 }
 
-func (r *Html) HRule(out *bytes.Buffer) {
-	doubleSpace(out)
-	out.WriteString("<hr")
-	out.WriteString(r.closeTag)
+func (r *Html) HRule() {
+	r.w.newline()
+	r.w.WriteString("<hr")
+	r.w.WriteString(r.closeTag)
 }
 
-func (r *Html) BlockCode(out *bytes.Buffer, text []byte, lang string) {
-	doubleSpace(out)
+func (r *Html) BlockCode(text []byte, lang string) {
+	r.w.newline()
 
 	// parse out the language names/classes
 	count := 0
@@ -264,49 +308,49 @@ func (r *Html) BlockCode(out *bytes.Buffer, text []byte, lang string) {
 			continue
 		}
 		if count == 0 {
-			out.WriteString("<pre><code class=\"language-")
+			r.w.WriteString("<pre><code class=\"language-")
 		} else {
-			out.WriteByte(' ')
+			r.w.WriteByte(' ')
 		}
-		attrEscape(out, []byte(elt))
+		r.attrEscape([]byte(elt))
 		count++
 	}
 
 	if count == 0 {
-		out.WriteString("<pre><code>")
+		r.w.WriteString("<pre><code>")
 	} else {
-		out.WriteString("\">")
+		r.w.WriteString("\">")
 	}
 
-	attrEscape(out, text)
-	out.WriteString("</code></pre>\n")
+	r.attrEscape(text)
+	r.w.WriteString("</code></pre>\n")
 }
 
-func (r *Html) BlockQuote(out *bytes.Buffer, text []byte) {
-	doubleSpace(out)
-	out.WriteString("<blockquote>\n")
-	out.Write(text)
-	out.WriteString("</blockquote>\n")
+func (r *Html) BlockQuote(text []byte) {
+	r.w.newline()
+	r.w.WriteString("<blockquote>\n")
+	r.w.Write(text)
+	r.w.WriteString("</blockquote>\n")
 }
 
-func (r *Html) Table(out *bytes.Buffer, header []byte, body []byte, columnData []TableFlags) {
-	doubleSpace(out)
-	out.WriteString("<table>\n<thead>\n")
-	out.Write(header)
-	out.WriteString("</thead>\n\n<tbody>\n")
-	out.Write(body)
-	out.WriteString("</tbody>\n</table>\n")
+func (r *Html) Table(header []byte, body []byte, columnData []TableFlags) {
+	r.w.newline()
+	r.w.WriteString("<table>\n<thead>\n")
+	r.w.Write(header)
+	r.w.WriteString("</thead>\n\n<tbody>\n")
+	r.w.Write(body)
+	r.w.WriteString("</tbody>\n</table>\n")
 }
 
-func (r *Html) TableRow(out *bytes.Buffer, text []byte) {
-	doubleSpace(out)
-	out.WriteString("<tr>\n")
-	out.Write(text)
-	out.WriteString("\n</tr>\n")
+func (r *Html) TableRow(text []byte) {
+	r.w.newline()
+	r.w.WriteString("<tr>\n")
+	r.w.Write(text)
+	r.w.WriteString("\n</tr>\n")
 }
 
 func (r *Html) TableHeaderCell(out *bytes.Buffer, text []byte, align TableFlags) {
-	doubleSpace(out)
+	doubleEmphasis(out)
 	switch align {
 	case TableAlignmentLeft:
 		out.WriteString("<th align=\"left\">")
@@ -317,13 +361,12 @@ func (r *Html) TableHeaderCell(out *bytes.Buffer, text []byte, align TableFlags)
 	default:
 		out.WriteString("<th>")
 	}
-
 	out.Write(text)
 	out.WriteString("</th>")
 }
 
 func (r *Html) TableCell(out *bytes.Buffer, text []byte, align TableFlags) {
-	doubleSpace(out)
+	doubleEmphasis(out)
 	switch align {
 	case TableAlignmentLeft:
 		out.WriteString("<td align=\"left\">")
@@ -334,98 +377,97 @@ func (r *Html) TableCell(out *bytes.Buffer, text []byte, align TableFlags) {
 	default:
 		out.WriteString("<td>")
 	}
-
 	out.Write(text)
 	out.WriteString("</td>")
 }
 
-func (r *Html) BeginFootnotes(out *bytes.Buffer) {
-	out.WriteString("<div class=\"footnotes\">\n")
-	r.HRule(out)
-	r.BeginList(out, ListTypeOrdered)
+func (r *Html) BeginFootnotes() {
+	r.w.WriteString("<div class=\"footnotes\">\n")
+	r.HRule()
+	r.BeginList(ListTypeOrdered)
 }
 
-func (r *Html) EndFootnotes(out *bytes.Buffer) {
-	r.EndList(out, ListTypeOrdered)
-	out.WriteString("</div>\n")
+func (r *Html) EndFootnotes() {
+	r.EndList(ListTypeOrdered)
+	r.w.WriteString("</div>\n")
 }
 
-func (r *Html) FootnoteItem(out *bytes.Buffer, name, text []byte, flags ListType) {
+func (r *Html) FootnoteItem(name, text []byte, flags ListType) {
 	if flags&ListItemContainsBlock != 0 || flags&ListItemBeginningOfList != 0 {
-		doubleSpace(out)
+		r.w.newline()
 	}
 	slug := slugify(name)
-	out.WriteString(`<li id="`)
-	out.WriteString(`fn:`)
-	out.WriteString(r.parameters.FootnoteAnchorPrefix)
-	out.Write(slug)
-	out.WriteString(`">`)
-	out.Write(text)
+	r.w.WriteString(`<li id="`)
+	r.w.WriteString(`fn:`)
+	r.w.WriteString(r.parameters.FootnoteAnchorPrefix)
+	r.w.Write(slug)
+	r.w.WriteString(`">`)
+	r.w.Write(text)
 	if r.flags&FootnoteReturnLinks != 0 {
-		out.WriteString(` <a class="footnote-return" href="#`)
-		out.WriteString(`fnref:`)
-		out.WriteString(r.parameters.FootnoteAnchorPrefix)
-		out.Write(slug)
-		out.WriteString(`">`)
-		out.WriteString(r.parameters.FootnoteReturnLinkContents)
-		out.WriteString(`</a>`)
+		r.w.WriteString(` <a class="footnote-return" href="#`)
+		r.w.WriteString(`fnref:`)
+		r.w.WriteString(r.parameters.FootnoteAnchorPrefix)
+		r.w.Write(slug)
+		r.w.WriteString(`">`)
+		r.w.WriteString(r.parameters.FootnoteReturnLinkContents)
+		r.w.WriteString(`</a>`)
 	}
-	out.WriteString("</li>\n")
+	r.w.WriteString("</li>\n")
 }
 
-func (r *Html) BeginList(out *bytes.Buffer, flags ListType) {
-	doubleSpace(out)
+func (r *Html) BeginList(flags ListType) {
+	r.w.newline()
 	if flags&ListTypeOrdered != 0 {
-		out.WriteString("<ol>")
+		r.w.WriteString("<ol>")
 	} else {
-		out.WriteString("<ul>")
+		r.w.WriteString("<ul>")
 	}
 }
 
-func (r *Html) EndList(out *bytes.Buffer, flags ListType) {
+func (r *Html) EndList(flags ListType) {
 	if flags&ListTypeOrdered != 0 {
-		out.WriteString("</ol>\n")
+		r.w.WriteString("</ol>\n")
 	} else {
-		out.WriteString("</ul>\n")
+		r.w.WriteString("</ul>\n")
 	}
 }
 
-func (r *Html) ListItem(out *bytes.Buffer, text []byte, flags ListType) {
+func (r *Html) ListItem(text []byte, flags ListType) {
 	if flags&ListItemContainsBlock != 0 || flags&ListItemBeginningOfList != 0 {
-		doubleSpace(out)
+		r.w.newline()
 	}
-	out.WriteString("<li>")
-	out.Write(text)
-	out.WriteString("</li>\n")
+	r.w.WriteString("<li>")
+	r.w.Write(text)
+	r.w.WriteString("</li>\n")
 }
 
-func (r *Html) BeginParagraph(out *bytes.Buffer) {
-	doubleSpace(out)
-	out.WriteString("<p>")
+func (r *Html) BeginParagraph() {
+	r.w.newline()
+	r.w.WriteString("<p>")
 }
 
-func (r *Html) EndParagraph(out *bytes.Buffer) {
-	out.WriteString("</p>\n")
+func (r *Html) EndParagraph() {
+	r.w.WriteString("</p>\n")
 }
 
-func (r *Html) AutoLink(out *bytes.Buffer, link []byte, kind LinkType) {
+func (r *Html) AutoLink(link []byte, kind LinkType) {
 	skipRanges := htmlEntity.FindAllIndex(link, -1)
 	if r.flags&Safelink != 0 && !isSafeLink(link) && kind != LinkTypeEmail {
 		// mark it but don't link it if it is not a safe link: no smartypants
-		out.WriteString("<tt>")
-		entityEscapeWithSkip(out, link, skipRanges)
-		out.WriteString("</tt>")
+		r.w.WriteString("<tt>")
+		r.entityEscapeWithSkip(link, skipRanges)
+		r.w.WriteString("</tt>")
 		return
 	}
 
-	out.WriteString("<a href=\"")
+	r.w.WriteString("<a href=\"")
 	if kind == LinkTypeEmail {
-		out.WriteString("mailto:")
+		r.w.WriteString("mailto:")
 	} else {
-		r.maybeWriteAbsolutePrefix(out, link)
+		r.maybeWriteAbsolutePrefix(link)
 	}
 
-	entityEscapeWithSkip(out, link, skipRanges)
+	r.entityEscapeWithSkip(link, skipRanges)
 
 	var relAttrs []string
 	if r.flags&NofollowLinks != 0 && !isRelativeLink(link) {
@@ -435,111 +477,111 @@ func (r *Html) AutoLink(out *bytes.Buffer, link []byte, kind LinkType) {
 		relAttrs = append(relAttrs, "noreferrer")
 	}
 	if len(relAttrs) > 0 {
-		out.WriteString(fmt.Sprintf("\" rel=\"%s", strings.Join(relAttrs, " ")))
+		r.w.WriteString(fmt.Sprintf("\" rel=\"%s", strings.Join(relAttrs, " ")))
 	}
 
 	// blank target only add to external link
 	if r.flags&HrefTargetBlank != 0 && !isRelativeLink(link) {
-		out.WriteString("\" target=\"_blank")
+		r.w.WriteString("\" target=\"_blank")
 	}
 
-	out.WriteString("\">")
+	r.w.WriteString("\">")
 
 	// Pretty print: if we get an email address as
 	// an actual URI, e.g. `mailto:foo@bar.com`, we don't
 	// want to print the `mailto:` prefix
 	switch {
 	case bytes.HasPrefix(link, []byte("mailto://")):
-		attrEscape(out, link[len("mailto://"):])
+		r.attrEscape(link[len("mailto://"):])
 	case bytes.HasPrefix(link, []byte("mailto:")):
-		attrEscape(out, link[len("mailto:"):])
+		r.attrEscape(link[len("mailto:"):])
 	default:
-		entityEscapeWithSkip(out, link, skipRanges)
+		r.entityEscapeWithSkip(link, skipRanges)
 	}
 
-	out.WriteString("</a>")
+	r.w.WriteString("</a>")
 }
 
-func (r *Html) CodeSpan(out *bytes.Buffer, text []byte) {
-	out.WriteString("<code>")
-	attrEscape(out, text)
-	out.WriteString("</code>")
+func (r *Html) CodeSpan(text []byte) {
+	r.w.WriteString("<code>")
+	r.attrEscape(text)
+	r.w.WriteString("</code>")
 }
 
-func (r *Html) DoubleEmphasis(out *bytes.Buffer, text []byte) {
-	out.WriteString("<strong>")
-	out.Write(text)
-	out.WriteString("</strong>")
+func (r *Html) DoubleEmphasis(text []byte) {
+	r.w.WriteString("<strong>")
+	r.w.Write(text)
+	r.w.WriteString("</strong>")
 }
 
-func (r *Html) Emphasis(out *bytes.Buffer, text []byte) {
+func (r *Html) Emphasis(text []byte) {
 	if len(text) == 0 {
 		return
 	}
-	out.WriteString("<em>")
-	out.Write(text)
-	out.WriteString("</em>")
+	r.w.WriteString("<em>")
+	r.w.Write(text)
+	r.w.WriteString("</em>")
 }
 
-func (r *Html) maybeWriteAbsolutePrefix(out *bytes.Buffer, link []byte) {
+func (r *Html) maybeWriteAbsolutePrefix(link []byte) {
 	if r.parameters.AbsolutePrefix != "" && isRelativeLink(link) {
-		out.WriteString(r.parameters.AbsolutePrefix)
+		r.w.WriteString(r.parameters.AbsolutePrefix)
 		if link[0] != '/' {
-			out.WriteByte('/')
+			r.w.WriteByte('/')
 		}
 	}
 }
 
-func (r *Html) Image(out *bytes.Buffer, link []byte, title []byte, alt []byte) {
+func (r *Html) Image(link []byte, title []byte, alt []byte) {
 	if r.flags&SkipImages != 0 {
 		return
 	}
 
-	out.WriteString("<img src=\"")
-	r.maybeWriteAbsolutePrefix(out, link)
-	attrEscape(out, link)
-	out.WriteString("\" alt=\"")
+	r.w.WriteString("<img src=\"")
+	r.maybeWriteAbsolutePrefix(link)
+	r.attrEscape(link)
+	r.w.WriteString("\" alt=\"")
 	if len(alt) > 0 {
-		attrEscape(out, alt)
+		r.attrEscape(alt)
 	}
 	if len(title) > 0 {
-		out.WriteString("\" title=\"")
-		attrEscape(out, title)
+		r.w.WriteString("\" title=\"")
+		r.attrEscape(title)
 	}
 
-	out.WriteByte('"')
-	out.WriteString(r.closeTag)
+	r.w.WriteByte('"')
+	r.w.WriteString(r.closeTag)
 	return
 }
 
-func (r *Html) LineBreak(out *bytes.Buffer) {
-	out.WriteString("<br")
-	out.WriteString(r.closeTag)
+func (r *Html) LineBreak() {
+	r.w.WriteString("<br")
+	r.w.WriteString(r.closeTag)
 }
 
-func (r *Html) Link(out *bytes.Buffer, link []byte, title []byte, content []byte) {
+func (r *Html) Link(link []byte, title []byte, content []byte) {
 	if r.flags&SkipLinks != 0 {
 		// write the link text out but don't link it, just mark it with typewriter font
-		out.WriteString("<tt>")
-		attrEscape(out, content)
-		out.WriteString("</tt>")
+		r.w.WriteString("<tt>")
+		r.attrEscape(content)
+		r.w.WriteString("</tt>")
 		return
 	}
 
 	if r.flags&Safelink != 0 && !isSafeLink(link) {
 		// write the link text out but don't link it, just mark it with typewriter font
-		out.WriteString("<tt>")
-		attrEscape(out, content)
-		out.WriteString("</tt>")
+		r.w.WriteString("<tt>")
+		r.attrEscape(content)
+		r.w.WriteString("</tt>")
 		return
 	}
 
-	out.WriteString("<a href=\"")
-	r.maybeWriteAbsolutePrefix(out, link)
-	attrEscape(out, link)
+	r.w.WriteString("<a href=\"")
+	r.maybeWriteAbsolutePrefix(link)
+	r.attrEscape(link)
 	if len(title) > 0 {
-		out.WriteString("\" title=\"")
-		attrEscape(out, title)
+		r.w.WriteString("\" title=\"")
+		r.attrEscape(title)
 	}
 	var relAttrs []string
 	if r.flags&NofollowLinks != 0 && !isRelativeLink(link) {
@@ -549,21 +591,21 @@ func (r *Html) Link(out *bytes.Buffer, link []byte, title []byte, content []byte
 		relAttrs = append(relAttrs, "noreferrer")
 	}
 	if len(relAttrs) > 0 {
-		out.WriteString(fmt.Sprintf("\" rel=\"%s", strings.Join(relAttrs, " ")))
+		r.w.WriteString(fmt.Sprintf("\" rel=\"%s", strings.Join(relAttrs, " ")))
 	}
 
 	// blank target only add to external link
 	if r.flags&HrefTargetBlank != 0 && !isRelativeLink(link) {
-		out.WriteString("\" target=\"_blank")
+		r.w.WriteString("\" target=\"_blank")
 	}
 
-	out.WriteString("\">")
-	out.Write(content)
-	out.WriteString("</a>")
+	r.w.WriteString("\">")
+	r.w.Write(content)
+	r.w.WriteString("</a>")
 	return
 }
 
-func (r *Html) RawHtmlTag(out *bytes.Buffer, text []byte) {
+func (r *Html) RawHtmlTag(text []byte) {
 	if r.flags&SkipHTML != 0 {
 		return
 	}
@@ -576,49 +618,49 @@ func (r *Html) RawHtmlTag(out *bytes.Buffer, text []byte) {
 	if r.flags&SkipImages != 0 && isHtmlTag(text, "img") {
 		return
 	}
-	out.Write(text)
+	r.w.Write(text)
 }
 
-func (r *Html) TripleEmphasis(out *bytes.Buffer, text []byte) {
-	out.WriteString("<strong><em>")
-	out.Write(text)
-	out.WriteString("</em></strong>")
+func (r *Html) TripleEmphasis(text []byte) {
+	r.w.WriteString("<strong><em>")
+	r.w.Write(text)
+	r.w.WriteString("</em></strong>")
 }
 
-func (r *Html) StrikeThrough(out *bytes.Buffer, text []byte) {
-	out.WriteString("<del>")
-	out.Write(text)
-	out.WriteString("</del>")
+func (r *Html) StrikeThrough(text []byte) {
+	r.w.WriteString("<del>")
+	r.w.Write(text)
+	r.w.WriteString("</del>")
 }
 
-func (r *Html) FootnoteRef(out *bytes.Buffer, ref []byte, id int) {
+func (r *Html) FootnoteRef(ref []byte, id int) {
 	slug := slugify(ref)
-	out.WriteString(`<sup class="footnote-ref" id="`)
-	out.WriteString(`fnref:`)
-	out.WriteString(r.parameters.FootnoteAnchorPrefix)
-	out.Write(slug)
-	out.WriteString(`"><a rel="footnote" href="#`)
-	out.WriteString(`fn:`)
-	out.WriteString(r.parameters.FootnoteAnchorPrefix)
-	out.Write(slug)
-	out.WriteString(`">`)
-	out.WriteString(strconv.Itoa(id))
-	out.WriteString(`</a></sup>`)
+	r.w.WriteString(`<sup class="footnote-ref" id="`)
+	r.w.WriteString(`fnref:`)
+	r.w.WriteString(r.parameters.FootnoteAnchorPrefix)
+	r.w.Write(slug)
+	r.w.WriteString(`"><a rel="footnote" href="#`)
+	r.w.WriteString(`fn:`)
+	r.w.WriteString(r.parameters.FootnoteAnchorPrefix)
+	r.w.Write(slug)
+	r.w.WriteString(`">`)
+	r.w.WriteString(strconv.Itoa(id))
+	r.w.WriteString(`</a></sup>`)
 }
 
-func (r *Html) Entity(out *bytes.Buffer, entity []byte) {
-	out.Write(entity)
+func (r *Html) Entity(entity []byte) {
+	r.w.Write(entity)
 }
 
-func (r *Html) NormalText(out *bytes.Buffer, text []byte) {
+func (r *Html) NormalText(text []byte) {
 	if r.flags&UseSmartypants != 0 {
-		r.Smartypants(out, text)
+		r.Smartypants(text)
 	} else {
-		attrEscape(out, text)
+		r.attrEscape(text)
 	}
 }
 
-func (r *Html) Smartypants(out *bytes.Buffer, text []byte) {
+func (r *Html) Smartypants(text []byte) {
 	smrt := smartypantsData{false, false}
 
 	// first do normal entity escaping
@@ -630,7 +672,7 @@ func (r *Html) Smartypants(out *bytes.Buffer, text []byte) {
 	for i := 0; i < len(text); i++ {
 		if action := r.smartypants[text[i]]; action != nil {
 			if i > mark {
-				out.Write(text[mark:i])
+				r.w.Write(text[mark:i])
 			}
 
 			previousChar := byte(0)
@@ -643,51 +685,51 @@ func (r *Html) Smartypants(out *bytes.Buffer, text []byte) {
 	}
 
 	if mark < len(text) {
-		out.Write(text[mark:])
+		r.w.Write(text[mark:])
 	}
 }
 
-func (r *Html) DocumentHeader(out *bytes.Buffer) {
+func (r *Html) DocumentHeader() {
 	if r.flags&CompletePage == 0 {
 		return
 	}
 
 	ending := ""
 	if r.flags&UseXHTML != 0 {
-		out.WriteString("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" ")
-		out.WriteString("\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n")
-		out.WriteString("<html xmlns=\"http://www.w3.org/1999/xhtml\">\n")
+		r.w.WriteString("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" ")
+		r.w.WriteString("\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n")
+		r.w.WriteString("<html xmlns=\"http://www.w3.org/1999/xhtml\">\n")
 		ending = " /"
 	} else {
-		out.WriteString("<!DOCTYPE html>\n")
-		out.WriteString("<html>\n")
+		r.w.WriteString("<!DOCTYPE html>\n")
+		r.w.WriteString("<html>\n")
 	}
-	out.WriteString("<head>\n")
-	out.WriteString("  <title>")
-	r.NormalText(out, []byte(r.title))
-	out.WriteString("</title>\n")
-	out.WriteString("  <meta name=\"GENERATOR\" content=\"Blackfriday Markdown Processor v")
-	out.WriteString(Version)
-	out.WriteString("\"")
-	out.WriteString(ending)
-	out.WriteString(">\n")
-	out.WriteString("  <meta charset=\"utf-8\"")
-	out.WriteString(ending)
-	out.WriteString(">\n")
+	r.w.WriteString("<head>\n")
+	r.w.WriteString("  <title>")
+	r.NormalText([]byte(r.title))
+	r.w.WriteString("</title>\n")
+	r.w.WriteString("  <meta name=\"GENERATOR\" content=\"Blackfriday Markdown Processor v")
+	r.w.WriteString(Version)
+	r.w.WriteString("\"")
+	r.w.WriteString(ending)
+	r.w.WriteString(">\n")
+	r.w.WriteString("  <meta charset=\"utf-8\"")
+	r.w.WriteString(ending)
+	r.w.WriteString(">\n")
 	if r.css != "" {
-		out.WriteString("  <link rel=\"stylesheet\" type=\"text/css\" href=\"")
-		attrEscape(out, []byte(r.css))
-		out.WriteString("\"")
-		out.WriteString(ending)
-		out.WriteString(">\n")
+		r.w.WriteString("  <link rel=\"stylesheet\" type=\"text/css\" href=\"")
+		r.attrEscape([]byte(r.css))
+		r.w.WriteString("\"")
+		r.w.WriteString(ending)
+		r.w.WriteString(">\n")
 	}
-	out.WriteString("</head>\n")
-	out.WriteString("<body>\n")
+	r.w.WriteString("</head>\n")
+	r.w.WriteString("<body>\n")
 
 	r.tocMarker = out.Len()
 }
 
-func (r *Html) DocumentFooter(out *bytes.Buffer) {
+func (r *Html) DocumentFooter() {
 	// finalize and insert the table of contents
 	if r.flags&Toc != 0 {
 		r.TocFinalize()
@@ -703,28 +745,28 @@ func (r *Html) DocumentFooter(out *bytes.Buffer) {
 
 		// corner case spacing issue
 		if r.flags&CompletePage != 0 {
-			out.WriteByte('\n')
+			r.w.WriteByte('\n')
 		}
 
 		// insert the table of contents
-		out.WriteString("<nav>\n")
-		out.Write(r.toc.Bytes())
-		out.WriteString("</nav>\n")
+		r.w.WriteString("<nav>\n")
+		r.w.Write(r.toc.Bytes())
+		r.w.WriteString("</nav>\n")
 
 		// corner case spacing issue
 		if r.flags&CompletePage == 0 && r.flags&OmitContents == 0 {
-			out.WriteByte('\n')
+			r.w.WriteByte('\n')
 		}
 
 		// write out everything that came after it
 		if r.flags&OmitContents == 0 {
-			out.Write(temp.Bytes())
+			r.w.Write(temp.Bytes())
 		}
 	}
 
 	if r.flags&CompletePage != 0 {
-		out.WriteString("\n</body>\n")
-		out.WriteString("</html>\n")
+		r.w.WriteString("\n</body>\n")
+		r.w.WriteString("</html>\n")
 	}
 
 }
@@ -862,12 +904,6 @@ func skipSpace(tag []byte, i int) int {
 		i++
 	}
 	return i
-}
-
-func doubleSpace(out *bytes.Buffer) {
-	if out.Len() > 0 {
-		out.WriteByte('\n')
-	}
 }
 
 func isRelativeLink(link []byte) (yes bool) {
