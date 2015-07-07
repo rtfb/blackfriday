@@ -151,8 +151,8 @@ type Renderer interface {
 	BlockCode(text []byte, lang string)
 	BlockQuote(text []byte)
 	BlockHtml(text []byte)
-	BeginHeader(level int, id string) int
-	EndHeader(level int, id string, tocMarker int)
+	BeginHeader(level int, id string)
+	EndHeader(level int, id string, header []byte)
 	HRule()
 	BeginList(flags ListType)
 	EndList(flags ListType)
@@ -190,11 +190,12 @@ type Renderer interface {
 	DocumentFooter()
 
 	GetFlags() HtmlFlags
+	captureWrites(processor func()) []byte
 }
 
 // Callback functions for inline parsing. One such function is defined
 // for each character that triggers a response when parsing inline data.
-type inlineParser func(p *parser, out *bytes.Buffer, data []byte, offset int) int
+type inlineParser func(p *parser, data []byte, offset int) int
 
 // Parser holds runtime state used by the parser.
 // This is constructed by the Markdown function.
@@ -373,13 +374,11 @@ func firstPass(p *parser, input []byte) []byte {
 
 // second pass: actual rendering
 func secondPass(p *parser, input []byte) []byte {
-	var output bytes.Buffer
-
-	p.r.DocumentHeader(&output)
-	p.block(&output, input)
+	p.r.DocumentHeader()
+	p.block(input)
 
 	if p.flags&Footnotes != 0 && len(p.notes) > 0 {
-		p.r.BeginFootnotes(&output)
+		p.r.BeginFootnotes()
 		flags := ListItemBeginningOfList
 		for _, ref := range p.notes {
 			var buf bytes.Buffer
@@ -389,19 +388,19 @@ func secondPass(p *parser, input []byte) []byte {
 			} else {
 				p.inline(&buf, ref.title)
 			}
-			p.r.FootnoteItem(&output, ref.link, buf.Bytes(), flags)
+			p.r.FootnoteItem(ref.link, buf.Bytes(), flags)
 			flags &^= ListItemBeginningOfList | ListItemContainsBlock
 		}
-		p.r.EndFootnotes(&output)
+		p.r.EndFootnotes()
 	}
 
-	p.r.DocumentFooter(&output)
+	p.r.DocumentFooter()
 
 	if p.nesting != 0 {
 		panic("Nesting level did not end at zero")
 	}
 
-	return output.Bytes()
+	return p.r.w.buff.Bytes()
 }
 
 //

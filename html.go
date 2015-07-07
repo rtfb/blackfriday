@@ -18,7 +18,6 @@ package blackfriday
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -96,7 +95,7 @@ type Html struct {
 	headerIDs map[string]int
 
 	smartypants *smartypantsRenderer
-	w           io.Writer
+	w           HtmlWriter
 }
 
 const (
@@ -116,8 +115,9 @@ func HtmlRenderer(flags HtmlFlags, title string, css string) Renderer {
 }
 
 type HtmlWriter struct {
-	buff  bytes.Buffer
-	dirty bool
+	buff    bytes.Buffer
+	capture *bytes.Buffer
+	dirty   bool
 }
 
 func (w HtmlWriter) Write(p []byte) (n int, err error) {
@@ -141,14 +141,14 @@ func (w HtmlWriter) WriteByte(b byte) (n int, err error) {
 	if w.capture != nil {
 		w.capture.WriteByte(b)
 	}
-	return w.buff.WriteByte(b)
+	return 1, w.buff.WriteByte(b)
 }
 
 // replaces obscurely named doubleSpace()
 func (w HtmlWriter) newline() {
 	if w.dirty {
 		if w.capture != nil {
-			w.capture.WriteString(s)
+			w.capture.WriteByte('\n')
 		}
 		w.buff.WriteByte('\n')
 	}
@@ -350,7 +350,7 @@ func (r *Html) TableRow(text []byte) {
 }
 
 func (r *Html) TableHeaderCell(out *bytes.Buffer, text []byte, align TableFlags) {
-	doubleEmphasis(out)
+	doubleSpace(out)
 	switch align {
 	case TableAlignmentLeft:
 		out.WriteString("<th align=\"left\">")
@@ -366,7 +366,7 @@ func (r *Html) TableHeaderCell(out *bytes.Buffer, text []byte, align TableFlags)
 }
 
 func (r *Html) TableCell(out *bytes.Buffer, text []byte, align TableFlags) {
-	doubleEmphasis(out)
+	doubleSpace(out)
 	switch align {
 	case TableAlignmentLeft:
 		out.WriteString("<td align=\"left\">")
@@ -664,9 +664,10 @@ func (r *Html) Smartypants(text []byte) {
 	smrt := smartypantsData{false, false}
 
 	// first do normal entity escaping
-	var escaped bytes.Buffer
-	attrEscape(&escaped, text)
-	text = escaped.Bytes()
+	escaped := r.captureWrites(func() {
+		r.attrEscape(text)
+	})
+	text = escaped
 
 	mark := 0
 	for i := 0; i < len(text); i++ {
@@ -679,7 +680,9 @@ func (r *Html) Smartypants(text []byte) {
 			if i > 0 {
 				previousChar = text[i-1]
 			}
-			i += action(out, &smrt, previousChar, text[i:])
+			var tmp bytes.Buffer
+			i += action(&tmp, &smrt, previousChar, text[i:])
+			r.w.Write(tmp.Bytes())
 			mark = i + 1
 		}
 	}
@@ -726,7 +729,7 @@ func (r *Html) DocumentHeader() {
 	r.w.WriteString("</head>\n")
 	r.w.WriteString("<body>\n")
 
-	r.tocMarker = out.Len()
+	//r.tocMarker = out.Len() // XXX
 }
 
 func (r *Html) DocumentFooter() {
@@ -904,6 +907,12 @@ func skipSpace(tag []byte, i int) int {
 		i++
 	}
 	return i
+}
+
+func doubleSpace(out *bytes.Buffer) {
+	if out.Len() > 0 {
+		out.WriteByte('\n')
+	}
 }
 
 func isRelativeLink(link []byte) (yes bool) {
