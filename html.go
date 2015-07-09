@@ -162,6 +162,14 @@ func (r *Html) captureWrites(processor func()) []byte {
 	return buff.Bytes()
 }
 
+func (r *Html) Write(b []byte) (int, error) {
+	return r.w.Write(b)
+}
+
+func (r *Html) getResult() []byte {
+	return r.w.buff.Bytes()
+}
+
 func HtmlRendererWithParameters(flags HtmlFlags, title string,
 	css string, renderParameters HtmlRendererParameters) Renderer {
 	// configure the rendering engine

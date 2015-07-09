@@ -191,6 +191,8 @@ type Renderer interface {
 
 	GetFlags() HtmlFlags
 	captureWrites(processor func()) []byte
+	Write(b []byte) (int, error)
+	getResult() []byte
 }
 
 // Callback functions for inline parsing. One such function is defined
@@ -333,7 +335,10 @@ func firstPass(p *parser, input []byte) []byte {
 			if p.flags&FencedCode != 0 {
 				// when last line was none blank and a fenced code block comes after
 				if beg >= lastFencedCodeBlockEnd {
-					if i := p.fencedCode(&out, input[beg:], false); i > 0 {
+					// the 'false' parameter to fencedCode stands for "don't
+					// render", so this call only looks for fenced code blocks,
+					// but doesn't write anything to the output:
+					if i := p.fencedCode(input[beg:], false); i > 0 {
 						if !lastLineWasBlank {
 							out.WriteByte('\n') // need to inject additional linebreak
 						}
@@ -384,9 +389,13 @@ func secondPass(p *parser, input []byte) []byte {
 			var buf bytes.Buffer
 			if ref.hasBlock {
 				flags |= ListItemContainsBlock
-				p.block(&buf, ref.title)
+				buf.Write(p.r.captureWrites(func() {
+					p.block(ref.title)
+				}))
 			} else {
-				p.inline(&buf, ref.title)
+				buf.Write(p.r.captureWrites(func() {
+					p.inline(ref.title)
+				}))
 			}
 			p.r.FootnoteItem(ref.link, buf.Bytes(), flags)
 			flags &^= ListItemBeginningOfList | ListItemContainsBlock
@@ -400,7 +409,7 @@ func secondPass(p *parser, input []byte) []byte {
 		panic("Nesting level did not end at zero")
 	}
 
-	return p.r.w.buff.Bytes()
+	return p.r.getResult()
 }
 
 //
