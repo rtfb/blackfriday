@@ -38,6 +38,14 @@ func LatexRenderer(flags int) Renderer {
 	}
 }
 
+func (r *Latex) copyWrites(processor func()) []byte {
+	var buff bytes.Buffer
+	r.w.copyBuff = &buff
+	processor()
+	r.w.copyBuff = nil
+	return buff.Bytes()
+}
+
 func (r *Latex) captureWrites(processor func()) []byte {
 	var buff bytes.Buffer
 	r.w.capture = &buff

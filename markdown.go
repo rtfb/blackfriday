@@ -191,6 +191,7 @@ type Renderer interface {
 
 	GetFlags() HtmlFlags
 	captureWrites(processor func()) []byte
+	copyWrites(processor func()) []byte
 	Write(b []byte) (int, error)
 	getResult() []byte
 }

@@ -115,43 +115,60 @@ func HtmlRenderer(flags HtmlFlags, title string, css string) Renderer {
 }
 
 type HtmlWriter struct {
-	buff    bytes.Buffer
-	capture *bytes.Buffer
-	dirty   bool
+	buff     bytes.Buffer
+	capture  *bytes.Buffer
+	copyBuff *bytes.Buffer
+	dirty    bool
 }
 
 func (w *HtmlWriter) Write(p []byte) (n int, err error) {
 	w.dirty = true
+	if w.copyBuff != nil {
+		w.copyBuff.Write(p)
+	}
 	if w.capture != nil {
 		w.capture.Write(p)
+		return
 	}
 	return w.buff.Write(p)
 }
 
 func (w *HtmlWriter) WriteString(s string) (n int, err error) {
 	w.dirty = true
+	if w.copyBuff != nil {
+		w.copyBuff.WriteString(s)
+	}
 	if w.capture != nil {
 		w.capture.WriteString(s)
+		return
 	}
 	return w.buff.WriteString(s)
 }
 
-func (w *HtmlWriter) WriteByte(b byte) (n int, err error) {
+func (w *HtmlWriter) WriteByte(b byte) error {
 	w.dirty = true
-	if w.capture != nil {
-		w.capture.WriteByte(b)
+	if w.copyBuff != nil {
+		w.copyBuff.WriteByte(b)
 	}
-	return 1, w.buff.WriteByte(b)
+	if w.capture != nil {
+		return w.capture.WriteByte(b)
+	}
+	return w.buff.WriteByte(b)
 }
 
 // replaces obscurely named doubleSpace()
 func (w *HtmlWriter) newline() {
 	if w.dirty {
-		if w.capture != nil {
-			w.capture.WriteByte('\n')
-		}
-		w.buff.WriteByte('\n')
+		w.WriteByte('\n')
 	}
+}
+
+func (r *Html) copyWrites(processor func()) []byte {
+	var buff bytes.Buffer
+	r.w.copyBuff = &buff
+	processor()
+	r.w.copyBuff = nil
+	return buff.Bytes()
 }
 
 func (r *Html) captureWrites(processor func()) []byte {

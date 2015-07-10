@@ -231,10 +231,9 @@ func (p *parser) prefixHeader(data []byte) int {
 			id = sanitized_anchor_name.Create(string(data[i:end]))
 		}
 		p.r.BeginHeader(level, id)
-		header := p.r.captureWrites(func() {
+		header := p.r.copyWrites(func() {
 			p.inline(data[i:end])
 		})
-		//p.r.EndHeader(out, level, id, tocMarker)
 		p.r.EndHeader(level, id, header)
 	}
 	return skip
@@ -1292,10 +1291,9 @@ func (p *parser) paragraph(data []byte) int {
 				}
 
 				p.r.BeginHeader(level, id)
-				header := p.r.captureWrites(func() {
+				header := p.r.copyWrites(func() {
 					p.inline(data[prev:eol])
 				})
-				//p.r.EndHeader(out, level, id, tocMarker)
 				p.r.EndHeader(level, id, header)
 
 				// find the end of the underline
