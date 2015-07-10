@@ -737,7 +737,7 @@ func (r *Html) DocumentHeader() {
 	r.w.WriteString("</head>\n")
 	r.w.WriteString("<body>\n")
 
-	//r.tocMarker = out.Len() // XXX
+	r.tocMarker = r.w.buff.Len() // XXX
 }
 
 func (r *Html) DocumentFooter() {
@@ -749,10 +749,10 @@ func (r *Html) DocumentFooter() {
 		var temp bytes.Buffer
 
 		// start by making a copy of everything after the document header
-		temp.Write(out.Bytes()[r.tocMarker:])
+		temp.Write(r.w.buff.Bytes()[r.tocMarker:])
 
 		// now clear the copied material from the main output buffer
-		out.Truncate(r.tocMarker)
+		r.w.buff.Truncate(r.tocMarker)
 
 		// corner case spacing issue
 		if r.flags&CompletePage != 0 {
