@@ -120,7 +120,7 @@ type HtmlWriter struct {
 	dirty   bool
 }
 
-func (w HtmlWriter) Write(p []byte) (n int, err error) {
+func (w *HtmlWriter) Write(p []byte) (n int, err error) {
 	w.dirty = true
 	if w.capture != nil {
 		w.capture.Write(p)
@@ -128,7 +128,7 @@ func (w HtmlWriter) Write(p []byte) (n int, err error) {
 	return w.buff.Write(p)
 }
 
-func (w HtmlWriter) WriteString(s string) (n int, err error) {
+func (w *HtmlWriter) WriteString(s string) (n int, err error) {
 	w.dirty = true
 	if w.capture != nil {
 		w.capture.WriteString(s)
@@ -136,7 +136,7 @@ func (w HtmlWriter) WriteString(s string) (n int, err error) {
 	return w.buff.WriteString(s)
 }
 
-func (w HtmlWriter) WriteByte(b byte) (n int, err error) {
+func (w *HtmlWriter) WriteByte(b byte) (n int, err error) {
 	w.dirty = true
 	if w.capture != nil {
 		w.capture.WriteByte(b)
@@ -145,7 +145,7 @@ func (w HtmlWriter) WriteByte(b byte) (n int, err error) {
 }
 
 // replaces obscurely named doubleSpace()
-func (w HtmlWriter) newline() {
+func (w *HtmlWriter) newline() {
 	if w.dirty {
 		if w.capture != nil {
 			w.capture.WriteByte('\n')
