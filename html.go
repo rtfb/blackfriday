@@ -173,9 +173,13 @@ func (r *Html) copyWrites(processor func()) []byte {
 
 func (r *Html) captureWrites(processor func()) []byte {
 	var buff bytes.Buffer
+	tmp := r.w.capture
+	tmpd := r.w.dirty
 	r.w.capture = &buff
+	r.w.dirty = false
 	processor()
-	r.w.capture = nil
+	r.w.capture = tmp
+	r.w.dirty = tmpd
 	return buff.Bytes()
 }
 
