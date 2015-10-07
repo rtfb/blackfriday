@@ -1188,8 +1188,6 @@ gatherlines:
 		if sublist > 0 {
 			cooked.Write(p.r.captureWrites(func() {
 				p.block(rawBytes[:sublist])
-			}))
-			cooked.Write(p.r.captureWrites(func() {
 				p.block(rawBytes[sublist:])
 			}))
 		} else {
@@ -1202,8 +1200,6 @@ gatherlines:
 		if sublist > 0 {
 			cooked.Write(p.r.captureWrites(func() {
 				p.inline(rawBytes[:sublist])
-			}))
-			cooked.Write(p.r.captureWrites(func() {
 				p.block(rawBytes[sublist:])
 			}))
 		} else {
