@@ -938,3 +938,14 @@ func slugify(in []byte) []byte {
 	}
 	return out[a : b+1]
 }
+
+func ulen(b []byte) uint32 {
+	return uint32(len(b))
+}
+
+func peek(line []byte, pos uint32) byte {
+	if pos < ulen(line) {
+		return line[pos]
+	}
+	return 0
+}
