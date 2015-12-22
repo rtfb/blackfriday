@@ -206,6 +206,9 @@ type Renderer interface {
 	CopyWrites(processor func()) []byte
 	Write(b []byte) (int, error)
 	GetResult() []byte
+
+	SetAST(ast *Node)
+	GetAST() *Node
 }
 
 // Callback functions for inline parsing. One such function is defined
@@ -228,6 +231,7 @@ type parser struct {
 	// presence. If a ref is also a footnote, it's stored both in refs and here
 	// in notes. Slice is nil if footnotes not enabled.
 	notes []*reference
+	ast   *Node
 }
 
 func (p *parser) getRef(refid string) (ref *reference, found bool) {
@@ -395,6 +399,7 @@ func MarkdownOptions(input []byte, renderer Renderer, opts Options) []byte {
 	}
 
 	first := firstPass(p, input)
+	renderer.SetAST(p.ast)
 	second := secondPass(p, first)
 	return second
 }
@@ -412,6 +417,8 @@ func firstPass(p *parser, input []byte) []byte {
 	}
 	beg, end := 0, 0
 	lastFencedCodeBlockEnd := 0
+	astParser := NewParser()
+	var numLines uint32
 	for beg < len(input) { // iterate over lines
 		if end = isReference(p, input[beg:], tabSize); end > 0 {
 			beg += end
@@ -432,6 +439,8 @@ func firstPass(p *parser, input []byte) []byte {
 			}
 
 			// add the line body if present
+			astParser.incorporateLine(input[beg:end])
+			numLines++
 			if end > beg {
 				if end < lastFencedCodeBlockEnd { // Do not expand tabs while inside fenced code blocks.
 					out.Write(input[beg:end])
@@ -456,6 +465,12 @@ func firstPass(p *parser, input []byte) []byte {
 	if out.Len() == 0 {
 		out.WriteByte('\n')
 	}
+
+	for astParser.tip != nil {
+		astParser.finalize(astParser.tip, numLines)
+	}
+	astParser.processInlines(astParser.doc)
+	p.ast = astParser.doc
 
 	return out.Bytes()
 }

@@ -97,6 +97,7 @@ type Html struct {
 
 	smartypants *smartypantsRenderer
 	w           HtmlWriter
+	ast         *Node
 }
 
 const (
@@ -275,6 +276,14 @@ func (r *Html) entityEscapeWithSkip(src []byte, skipRanges [][]int) {
 
 func (r *Html) GetFlags() HtmlFlags {
 	return r.flags
+}
+
+func (r *Html) SetAST(ast *Node) {
+	r.ast = ast
+}
+
+func (r *Html) GetAST() *Node {
+	return r.ast
 }
 
 func (r *Html) TitleBlock(text []byte) {
