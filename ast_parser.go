@@ -23,7 +23,7 @@ type Parser struct {
 	indented             bool
 	blank                bool
 	allClosed            bool
-	//inlineParser         *InlineParser
+	inlineParser         *InlineParser
 }
 
 func NewParser() *Parser {
@@ -40,7 +40,7 @@ func NewParser() *Parser {
 		currentLine:          []byte{},
 		lines:                nil,
 		allClosed:            true,
-		//inlineParser:         NewInlineParser(),
+		inlineParser:         NewInlineParser(),
 	}
 }
 
@@ -150,14 +150,11 @@ func (p *Parser) processInlines(ast *Node) {
 			}
 		}
 	*/
-	/*
-		forEachNode(ast, func(node *Node, entering bool) {
-			if node.Type == Paragraph || node.Type == Header {
-				// TODO
-				//p.inlineParser.parse(node)
-			}
-		})
-	*/
+	forEachNode(ast, func(node *Node, entering bool) {
+		if node.Type == Paragraph || node.Type == Header {
+			p.inlineParser.parse(node)
+		}
+	})
 }
 
 func (p *Parser) addLine() {
