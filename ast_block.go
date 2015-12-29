@@ -8,7 +8,7 @@ import (
 type BlockStatus int
 
 const (
-	NoMatch = iota
+	NoMatch BlockStatus = iota
 	ContainerMatch
 	LeafMatch
 )
@@ -16,7 +16,7 @@ const (
 type ContinueStatus int
 
 const (
-	Matched = iota
+	Matched ContinueStatus = iota
 	NotMatched
 	Completed
 )
