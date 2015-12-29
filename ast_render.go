@@ -23,6 +23,12 @@ func render(ast *Node) []byte {
 		buff.Write(text)
 		lastOutput = text
 	}
+	// XXX: this out("\n") is only for compatibility with existing Blackfriday
+	// tests. Not necessary otherwise and should probably be eliminated when
+	// the time comes
+	compatibilityNewline := func() {
+		out([]byte("\n"))
+	}
 	esc := func(text []byte, preserveEntities bool) []byte {
 		// XXX: impl
 		return text
@@ -76,10 +82,7 @@ func render(ast *Node) []byte {
 		case BlockQuote:
 			if entering {
 				cr()
-				// XXX: this out("\n") is only for compatibility with existing
-				// Blackfriday tests. Not necessary otherwise and should
-				// probably be eliminated when time comes
-				out([]byte("\n"))
+				compatibilityNewline()
 				out(tag("blockquote", attrs, false))
 				cr()
 			} else {
@@ -100,10 +103,7 @@ func render(ast *Node) []byte {
 			break
 		case HorizontalRule:
 			cr()
-			// XXX: this out("\n") is only for compatibility with existing
-			// Blackfriday tests. Not necessary otherwise and should
-			// probably be eliminated when time comes
-			out([]byte("\n"))
+			compatibilityNewline()
 			out(tag("hr", attrs, true))
 			cr()
 			break
