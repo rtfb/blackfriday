@@ -118,12 +118,9 @@ func (p *Parser) incorporateLine(line []byte) {
 		}
 		if blockHandlers[t].AcceptsLines() {
 			p.addLine()
-			//if t == HtmlBlock &&
-			//	container.htmlBlockType >= 1 &&
-			//	container.htmlBlockType <= 5 &&
-			//	reHtmlBlockClose() {
-			//	p.finalize(container, p.lineNumber)
-			//}
+			if t == HtmlBlock && canCloseHtmlBlock(container, p) {
+				p.finalize(container, p.lineNumber)
+			}
 		} else if p.offset < ulen(line) && !p.blank {
 			container = p.addChild(Paragraph, p.offset)
 			p.advanceNextNonspace()
@@ -131,6 +128,15 @@ func (p *Parser) incorporateLine(line []byte) {
 		}
 	}
 	p.lastLineLength = ulen(line)
+}
+
+func canCloseHtmlBlock(container *Node, p *Parser) bool {
+	if container.htmlBlockType < 1 || container.htmlBlockType > 5 {
+		return false
+	}
+	s := p.currentLine[p.offset:]
+	match := reHtmlBlockClose[container.htmlBlockType].Find(s)
+	return match != nil
 }
 
 func (p *Parser) finalize(block *Node, lineNumber uint32) {

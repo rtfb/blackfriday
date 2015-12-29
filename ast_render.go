@@ -91,6 +91,10 @@ func render(ast *Node) []byte {
 				cr()
 			}
 			break
+		case HtmlBlock:
+			compatibilityNewline()
+			out(node.literal)
+			cr()
 		case Header:
 			tagname := fmt.Sprintf("h%d", node.level)
 			if entering {

@@ -20,6 +20,7 @@ const (
 	Link
 	Image
 	Text
+	HtmlBlock
 )
 
 var nodeTypeNames = []string{
@@ -35,6 +36,7 @@ var nodeTypeNames = []string{
 	Link:           "Link",
 	Image:          "Image",
 	Text:           "Text",
+	HtmlBlock:      "HtmlBlock",
 }
 
 func (t NodeType) String() string {
@@ -53,6 +55,7 @@ type Node struct {
 	open          bool
 	lastLineBlank bool
 	literal       []byte
+	htmlBlockType int // In case Type == HtmlBlock, this holds its type
 }
 
 func NewNode(typ NodeType) *Node {

@@ -35,6 +35,9 @@ func TestAST2(t *testing.T) {
 	var tests = []string{
 		"# Header 1\n\n----\n\n> quote",
 		"<h1>Header 1</h1>\n\n<hr />\n\n<blockquote>\n<p>quote</p>\n</blockquote>\n",
+
+		"# Header\n\n<div><span><em>plain html</em></span></div>",
+		"<h1>Header</h1>\n\n<div><span><em>plain html</em></span></div>\n",
 	}
 	var candidate string
 	// catch and report panics
