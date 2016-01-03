@@ -4,6 +4,7 @@ import (
 	"testing"
 )
 
+/*
 func TestAST(t *testing.T) {
 	var tests = []string{
 		"# Header 1\n",
@@ -30,6 +31,7 @@ func TestAST(t *testing.T) {
 		}
 	}
 }
+*/
 
 func TestAST2(t *testing.T) {
 	var tests = []string{
