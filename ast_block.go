@@ -40,6 +40,7 @@ const (
 var (
 	blockTriggers = []func(p *Parser, container *Node) BlockStatus{
 		atxHeaderTrigger,
+		setextHeaderTrigger,
 		hruleTrigger,
 		blockquoteTrigger,
 		htmlBlockTrigger,
@@ -80,6 +81,7 @@ var (
 	}
 	reBulletListMarker  = regexp.MustCompile("^[*+-]( +|$)")
 	reOrderedListMarker = regexp.MustCompile("^(\\d{1,9})([.)])( +|$)")
+	reSetextHeaderLine  = regexp.MustCompile("^(?:=+|-+) *$")
 )
 
 type BlockHandler interface {
@@ -311,6 +313,48 @@ func atxHeaderTrigger(p *Parser, container *Node) BlockStatus {
 		return LeafMatch
 	}
 	return NoMatch
+}
+
+func setextHeaderCondition(p *Parser, container *Node) (bool, byte) {
+	if p.indented {
+		return false, 0
+	}
+	if container.Type != Paragraph {
+		return false, 0
+	}
+	if !bytes.HasSuffix(container.content, []byte("\n")) {
+		return false, 0
+	}
+	match := reSetextHeaderLine.FindSubmatch(p.currentLine[p.nextNonspace:])
+	if match != nil {
+		return true, match[0][0]
+	} else {
+		return false, 0
+	}
+}
+
+func levelFromChar(char byte) uint32 {
+	if char == '=' {
+		return 1
+	} else {
+		return 2
+	}
+}
+
+func setextHeaderTrigger(p *Parser, container *Node) BlockStatus {
+	if ok, char := setextHeaderCondition(p, container); ok {
+		p.closeUnmatchedBlocks()
+		header := NewNode(Header)
+		header.level = levelFromChar(char)
+		header.content = container.content
+		container.insertAfter(header)
+		container.unlink()
+		p.tip = header
+		p.advanceOffset(ulen(p.currentLine)-p.offset, false)
+		return LeafMatch
+	} else {
+		return NoMatch
+	}
 }
 
 func hruleTrigger(p *Parser, container *Node) BlockStatus {

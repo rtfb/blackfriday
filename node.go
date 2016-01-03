@@ -91,6 +91,20 @@ func (n *Node) unlink() {
 	n.prev = nil
 }
 
+func (n *Node) insertAfter(sibling *Node) {
+	sibling.unlink()
+	sibling.next = n.next
+	if sibling.next != nil {
+		sibling.next.prev = sibling
+	}
+	sibling.prev = n
+	n.next = sibling
+	sibling.parent = n.parent
+	if sibling.next == nil {
+		sibling.parent.lastChild = sibling
+	}
+}
+
 func (n *Node) appendChild(child *Node) {
 	child.unlink()
 	child.parent = n

@@ -44,6 +44,9 @@ func TestAST2(t *testing.T) {
 
 		"* List\n* Second item",
 		"<ul>\n<li>\n<p>List</p>\n</li>\n<li>\n<p>Second item</p>\n</li>\n</ul>\n",
+
+		"B\n-\n",
+		"<h2>B</h2>\n",
 	}
 	var candidate string
 	// catch and report panics
