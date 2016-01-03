@@ -38,6 +38,12 @@ func TestAST2(t *testing.T) {
 
 		"# Header\n\n<div><span><em>plain html</em></span></div>",
 		"<h1>Header</h1>\n\n<div><span><em>plain html</em></span></div>\n",
+
+		"* List\n",
+		"<ul>\n<li>\n<p>List</p>\n</li>\n</ul>\n",
+
+		"* List\n* Second item",
+		"<ul>\n<li>\n<p>List</p>\n</li>\n<li>\n<p>Second item</p>\n</li>\n</ul>\n",
 	}
 	var candidate string
 	// catch and report panics

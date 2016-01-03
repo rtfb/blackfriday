@@ -3,6 +3,7 @@ package blackfriday
 import (
 	"bytes"
 	"regexp"
+	"strconv"
 )
 
 type BlockStatus int
@@ -42,6 +43,7 @@ var (
 		hruleTrigger,
 		blockquoteTrigger,
 		htmlBlockTrigger,
+		listItemTrigger,
 	}
 
 	blockHandlers = map[NodeType]BlockHandler{
@@ -51,6 +53,9 @@ var (
 		BlockQuote:     &BlockQuoteBlockHandler{},
 		Paragraph:      &ParagraphBlockHandler{},
 		HtmlBlock:      &HtmlBlockHandler{},
+		List:           &ListBlockHandler{},
+		Item:           &ItemBlockHandler{},
+		// CodeBlock: &CodeBlockHandler{},
 	}
 
 	reATXHeaderMarker = regexp.MustCompile("^#{1,6}(?: +|$)")
@@ -73,6 +78,8 @@ var (
 		regexp.MustCompile(">"),
 		regexp.MustCompile("\\]\\]>"),
 	}
+	reBulletListMarker  = regexp.MustCompile("^[*+-]( +|$)")
+	reOrderedListMarker = regexp.MustCompile("^(\\d{1,9})([.)])( +|$)")
 )
 
 type BlockHandler interface {
@@ -224,6 +231,70 @@ func (h *HtmlBlockHandler) AcceptsLines() bool {
 	return true
 }
 
+type ListBlockHandler struct {
+}
+
+func (h *ListBlockHandler) Continue(p *Parser, container *Node) ContinueStatus {
+	return Matched
+}
+
+func (h *ListBlockHandler) Finalize(p *Parser, block *Node) {
+	item := block.firstChild
+	for item != nil {
+		// check for non-final list item ending with blank line:
+		if endsWithBlankLine(item) && item.next != nil {
+			block.listData.tight = false
+			break
+		}
+		// recurse into children of list item, to see if there are spaces
+		// between any of them:
+		subItem := item.firstChild
+		for subItem != nil {
+			if endsWithBlankLine(subItem) && (item.next != nil || subItem.next != nil) {
+				block.listData.tight = false
+				break
+			}
+			subItem = subItem.next
+		}
+		item = item.next
+	}
+}
+
+func (h *ListBlockHandler) CanContain(t NodeType) bool {
+	return t == Item
+}
+
+func (h *ListBlockHandler) AcceptsLines() bool {
+	return false
+}
+
+type ItemBlockHandler struct {
+}
+
+func (h *ItemBlockHandler) Continue(p *Parser, container *Node) ContinueStatus {
+	if p.blank && container.firstChild != nil {
+		p.advanceNextNonspace()
+		return Matched
+	}
+	offsetAndPadding := container.listData.markerOffset + container.listData.padding
+	if p.indent >= offsetAndPadding {
+		p.advanceOffset(offsetAndPadding, true)
+		return Matched
+	}
+	return NotMatched
+}
+
+func (h *ItemBlockHandler) Finalize(p *Parser, block *Node) {
+}
+
+func (h *ItemBlockHandler) CanContain(t NodeType) bool {
+	return t != Item
+}
+
+func (h *ItemBlockHandler) AcceptsLines() bool {
+	return false
+}
+
 func atxHeaderTrigger(p *Parser, container *Node) BlockStatus {
 	match := reATXHeaderMarker.Find(p.currentLine[p.nextNonspace:])
 	if !p.indented && match != nil {
@@ -283,4 +354,105 @@ func htmlBlockTrigger(p *Parser, container *Node) BlockStatus {
 		}
 	}
 	return NoMatch
+}
+
+// XXX: there's already ListType in blackfriday, so name it somewhat
+// differently for now. See if both types are necessary later.
+type ASTListType int
+
+const (
+	BulletList ASTListType = iota
+	OrderedList
+)
+
+type ListData struct {
+	Type         ASTListType
+	tight        bool
+	bulletChar   byte
+	start        uint32
+	delimiter    byte
+	padding      uint32
+	markerOffset uint32
+}
+
+func parseListMarker(line []byte, offset, indent uint32) *ListData {
+	rest := line[offset:]
+	spacesAfterMarker := uint32(0)
+	data := &ListData{
+		tight:        true,
+		markerOffset: indent,
+	}
+	match := reBulletListMarker.FindSubmatch(rest)
+	if match != nil {
+		spacesAfterMarker = ulen(match[1])
+		data.Type = BulletList
+		data.bulletChar = match[0][0]
+	} else {
+		match = reOrderedListMarker.FindSubmatch(rest)
+		if match != nil {
+			spacesAfterMarker = ulen(match[3])
+			data.Type = OrderedList
+			start, _ := strconv.Atoi(string(match[1]))
+			data.start = uint32(start)
+			data.delimiter = match[2][0]
+		} else {
+			return nil
+		}
+	}
+	blankItem := len(match[0]) == len(rest)
+	if spacesAfterMarker >= 5 || spacesAfterMarker < 1 || blankItem {
+		data.padding = ulen(match[0]) - spacesAfterMarker + 1
+	} else {
+		data.padding = ulen(match[0])
+	}
+	return data
+}
+
+// Returns true if the two list items are of the same type, with the same
+// delimiter and bullet character.  This is used in agglomerating list items
+// into lists.
+func listsMatch(listData, itemData *ListData) bool {
+	return listData.Type == itemData.Type &&
+		listData.delimiter == itemData.delimiter &&
+		listData.bulletChar == itemData.bulletChar
+}
+
+func listItemTrigger(p *Parser, container *Node) BlockStatus {
+	data := parseListMarker(p.currentLine, p.nextNonspace, p.indent)
+	if data != nil && (!p.indented || container.Type == List) {
+		p.closeUnmatchedBlocks()
+		p.advanceNextNonspace()
+		// recalculate data.padding, taking into account tabs:
+		i := p.column
+		p.advanceOffset(data.padding, false)
+		data.padding = p.column - i
+		// add the list if needed
+		if p.tip.Type != List || !listsMatch(container.listData, data) {
+			container = p.addChild(List, p.nextNonspace)
+			container.listData = data
+		}
+		// add the list item
+		container = p.addChild(Item, p.nextNonspace)
+		container.listData = data
+		return ContainerMatch
+	} else {
+		return NoMatch
+	}
+}
+
+// Returns true if block ends with a blank line, descending if needed
+// into lists and sublists.
+func endsWithBlankLine(block *Node) bool {
+	for block != nil {
+		if block.lastLineBlank {
+			return true
+		}
+		t := block.Type
+		if t == List || t == Item {
+			block = block.lastChild
+		} else {
+			break
+		}
+	}
+	return false
 }

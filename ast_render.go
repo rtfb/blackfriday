@@ -111,6 +111,31 @@ func render(ast *Node) []byte {
 			out(tag("hr", attrs, true))
 			cr()
 			break
+		case List:
+			tagName := "ul"
+			if node.listData.Type == OrderedList {
+				tagName = "ol"
+			}
+			if entering {
+				// var start = node.listStart;
+				// if (start !== null && start !== 1) {
+				//     attrs.push(['start', start.toString()]);
+				// }
+				cr()
+				out(tag(tagName, attrs, false))
+				cr()
+			} else {
+				cr()
+				out(tag("/"+tagName, nil, false))
+				cr()
+			}
+		case Item:
+			if entering {
+				out(tag("li", nil, false))
+			} else {
+				out(tag("/li", nil, false))
+				cr()
+			}
 		default:
 			panic("Unknown node type " + node.Type.String())
 		}

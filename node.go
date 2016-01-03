@@ -55,7 +55,8 @@ type Node struct {
 	open          bool
 	lastLineBlank bool
 	literal       []byte
-	htmlBlockType int // In case Type == HtmlBlock, this holds its type
+	htmlBlockType int       // In case Type == HtmlBlock, this holds its type
+	listData      *ListData // In case Type == List, this holds list info
 }
 
 func NewNode(typ NodeType) *Node {
