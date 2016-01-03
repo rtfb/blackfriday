@@ -185,7 +185,7 @@ func (p *Parser) addChild(node NodeType, offset uint32) *Node {
 func (p *Parser) advanceOffset(count uint32, columns bool) {
 	var i uint32 = 0
 	var cols uint32 = 0
-	for i < ulen(p.currentLine) {
+	for p.offset+i < ulen(p.currentLine) {
 		if columns {
 			if cols >= count {
 				break
