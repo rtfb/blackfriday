@@ -55,6 +55,7 @@ func (p *Parser) incorporateLine(line []byte) {
 	lastChild := container.lastChild
 	for lastChild != nil && lastChild.open {
 		container = lastChild
+		lastChild = container.lastChild
 		p.findNextNonspace()
 		switch blockHandlers[container.Type].Continue(p, container) {
 		case Matched: // matched, keep going
