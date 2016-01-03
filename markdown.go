@@ -26,6 +26,7 @@ import (
 )
 
 const VERSION = "1.4"
+const debugOutput = false
 
 type Extensions int
 
@@ -963,4 +964,11 @@ func peek(line []byte, pos uint32) byte {
 		return line[pos]
 	}
 	return 0
+}
+
+func dbg(format string, params ...interface{}) {
+	if !debugOutput {
+		return
+	}
+	fmt.Printf(format, params)
 }

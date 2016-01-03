@@ -57,14 +57,12 @@ func (p *InlineParser) handleDelim(ch byte, block *Node) bool {
 		return false
 	}
 	startPos := p.pos
-	println("startPos = ", startPos)
 	p.pos += numDelims
 	var contents []byte
 	if ch == '\'' || ch == '"' {
 		contents = []byte{ch}
 	} else {
 		contents = p.subject[startPos:p.pos]
-		println("--- ", string(contents))
 	}
 	node := text(contents)
 	block.appendChild(node)

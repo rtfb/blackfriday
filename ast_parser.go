@@ -2,7 +2,6 @@ package blackfriday
 
 import (
 	"bytes"
-	"fmt"
 )
 
 type Parser struct {
@@ -51,7 +50,7 @@ func (p *Parser) incorporateLine(line []byte) {
 	p.offset = 0
 	p.lineNumber += 1
 	p.currentLine = line
-	fmt.Printf("%3d: %s\n", p.lineNumber, string(line))
+	dbg("%3d: %s\n", p.lineNumber, string(line))
 	lastChild := container.lastChild
 	for lastChild != nil && lastChild.open {
 		container = lastChild
@@ -74,6 +73,7 @@ func (p *Parser) incorporateLine(line []byte) {
 			break
 		}
 	}
+	dbg("incorporateLine -- xx")
 	p.allClosed = container == p.oldTip
 	p.lastMatchedContainer = container
 	matchedLeaf := container.Type != Paragraph && blockHandlers[container.Type].AcceptsLines()
@@ -100,6 +100,7 @@ func (p *Parser) incorporateLine(line []byte) {
 			break
 		}
 	}
+	dbg("incorporateLine -- yy")
 	if !p.allClosed && !p.blank && p.tip.Type == Paragraph {
 		p.addLine()
 	} else {
@@ -128,6 +129,7 @@ func (p *Parser) incorporateLine(line []byte) {
 			p.addLine()
 		}
 	}
+	dbg("incorporateLine -- zz")
 	p.lastLineLength = ulen(line)
 }
 

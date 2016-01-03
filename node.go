@@ -147,34 +147,27 @@ func NewNodeWalker(root *Node) *NodeWalker {
 
 func (nw *NodeWalker) next() (*Node, bool) {
 	if nw.current == nil {
-		println(1)
 		return nil, false
 	}
 	if nw.root == nil {
 		nw.root = nw.current
-		println(2, nw.current.Type.String())
 		return nw.current, nw.entering
 	}
 	if nw.entering && nw.current.isContainer() {
 		if nw.current.firstChild != nil {
-			println(3)
 			nw.current = nw.current.firstChild
 			nw.entering = true
 		} else {
-			println(4)
 			nw.entering = false
 		}
 	} else if nw.current.next == nil {
 		nw.current = nw.current.parent
-		println(5, nw.current.Type.String())
 		nw.entering = false
 	} else {
 		nw.current = nw.current.next
-		println(6, nw.current.Type.String())
 		nw.entering = true
 	}
 	if nw.current == nw.root {
-		println(7)
 		return nil, false
 	}
 	return nw.current, nw.entering
@@ -206,7 +199,6 @@ TODO: use this one when forEachNode starts working
 func dumpString(ast *Node) string {
 	result := ""
 	forEachNode(ast, func(node *Node, entering bool) {
-		println("fen", node.Type.String())
 		indent := ""
 		tmp := node.parent
 		for tmp != nil {
