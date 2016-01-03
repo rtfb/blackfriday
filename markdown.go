@@ -970,5 +970,5 @@ func dbg(format string, params ...interface{}) {
 	if !debugOutput {
 		return
 	}
-	fmt.Printf(format, params)
+	fmt.Printf(format, params...)
 }

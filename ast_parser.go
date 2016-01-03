@@ -50,7 +50,7 @@ func (p *Parser) incorporateLine(line []byte) {
 	p.offset = 0
 	p.lineNumber += 1
 	p.currentLine = line
-	dbg("%3d: %s\n", p.lineNumber, string(line))
+	dbg("%3d: %q\n", p.lineNumber, string(line))
 	lastChild := container.lastChild
 	for lastChild != nil && lastChild.open {
 		container = lastChild
@@ -73,7 +73,7 @@ func (p *Parser) incorporateLine(line []byte) {
 			break
 		}
 	}
-	dbg("incorporateLine -- xx")
+	dbg("incorporateLine -- xx\n")
 	p.allClosed = container == p.oldTip
 	p.lastMatchedContainer = container
 	matchedLeaf := container.Type != Paragraph && blockHandlers[container.Type].AcceptsLines()
@@ -100,7 +100,7 @@ func (p *Parser) incorporateLine(line []byte) {
 			break
 		}
 	}
-	dbg("incorporateLine -- yy")
+	dbg("incorporateLine -- yy\n")
 	if !p.allClosed && !p.blank && p.tip.Type == Paragraph {
 		p.addLine()
 	} else {
@@ -129,7 +129,7 @@ func (p *Parser) incorporateLine(line []byte) {
 			p.addLine()
 		}
 	}
-	dbg("incorporateLine -- zz")
+	dbg("incorporateLine -- zz\n")
 	p.lastLineLength = ulen(line)
 }
 
