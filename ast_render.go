@@ -136,6 +136,19 @@ func render(ast *Node) []byte {
 				out(tag("/li", nil, false))
 				cr()
 			}
+		case CodeBlock:
+			// TODO:
+			// info_words = node.info ? node.info.split(/\s+/) : [];
+			// if (info_words.length > 0 && info_words[0].length > 0) {
+			//     attrs.push(['class', 'language-' + esc(info_words[0], true)]);
+			// }
+			cr()
+			out(tag("pre", nil, false))
+			out(tag("code", nil, false))
+			out(esc(node.literal, false))
+			out(tag("/code", nil, false))
+			out(tag("/pre", nil, false))
+			cr()
 		default:
 			panic("Unknown node type " + node.Type.String())
 		}

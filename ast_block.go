@@ -35,6 +35,10 @@ const (
 	Attribute          = "(?:" + "\\s+" + AttributeName + AttributeValueSpec + "?)"
 	OpenTag            = "<" + TagName + Attribute + "*" + "\\s*/?>"
 	CloseTag           = "</" + TagName + "\\s*[>]"
+	Entity             = "&(?:#x[a-f0-9]{1,8}|#[0-9]{1,8}|[a-z][a-z0-9]{1,31});"
+	Escapable          = "[!\"#$%&'()*+,./:;<=>?@[\\\\\\]^_`{|}~-]"
+
+	CodeIndent = 4
 )
 
 var (
@@ -45,6 +49,8 @@ var (
 		blockquoteTrigger,
 		htmlBlockTrigger,
 		listItemTrigger,
+		fencedCodeTrigger,
+		indentedCodeTrigger,
 	}
 
 	blockHandlers = map[NodeType]BlockHandler{
@@ -56,7 +62,7 @@ var (
 		HtmlBlock:      &HtmlBlockHandler{},
 		List:           &ListBlockHandler{},
 		Item:           &ItemBlockHandler{},
-		// CodeBlock: &CodeBlockHandler{},
+		CodeBlock:      &CodeBlockHandler{},
 	}
 
 	reATXHeaderMarker = regexp.MustCompile("^#{1,6}(?: +|$)")
@@ -79,9 +85,18 @@ var (
 		regexp.MustCompile(">"),
 		regexp.MustCompile("\\]\\]>"),
 	}
-	reBulletListMarker  = regexp.MustCompile("^[*+-]( +|$)")
-	reOrderedListMarker = regexp.MustCompile("^(\\d{1,9})([.)])( +|$)")
-	reSetextHeaderLine  = regexp.MustCompile("^(?:=+|-+) *$")
+	reBulletListMarker    = regexp.MustCompile("^[*+-]( +|$)")
+	reOrderedListMarker   = regexp.MustCompile("^(\\d{1,9})([.)])( +|$)")
+	reSetextHeaderLine    = regexp.MustCompile("^(?:=+|-+) *$")
+	reBackslashOrAmp      = regexp.MustCompile("[\\&]")
+	reEntityOrEscapedChar = regexp.MustCompile("(?i)\\\\" + Escapable + "|" + Entity)
+	reClosingCodeFence    = regexp.MustCompile("^(?:`{3,}|~{3,})(?: *$)")
+
+	//reCodeFence           = regexp.MustCompile("^`{3,}(?!.*`)|^~{3,}(?!.*~)")
+	// XXX: The above regexp has a negative lookahead bit (the one that goes
+	// (?!...)) and Go doesn't support negative lookahead. Need to figure out a
+	// way to work around that, but for now I'm using a simplified regexp below
+	reCodeFence = regexp.MustCompile("^`{3,}|^~{3,}")
 )
 
 type BlockHandler interface {
@@ -297,6 +312,74 @@ func (h *ItemBlockHandler) AcceptsLines() bool {
 	return false
 }
 
+type CodeBlockHandler struct {
+}
+
+func (h *CodeBlockHandler) Continue(p *Parser, container *Node) ContinueStatus {
+	if container.isFenced {
+		// Fenced
+		var match [][]byte
+		if p.indent <= 3 && p.currentLine[p.nextNonspace] == container.fenceChar {
+			match = reClosingCodeFence.FindSubmatch(p.currentLine[p.nextNonspace:])
+		}
+		if match != nil && ulen(match[0]) >= container.fenceLength {
+			// closing fence - we're at end of line, so we can return
+			p.finalize(container, p.lineNumber)
+			return Completed
+		} else {
+			// skip optional spaces of fence offset
+			for i := container.fenceOffset; i > 0 && peek(p.currentLine, p.offset) == ' '; i-- {
+				p.advanceOffset(1, false)
+			}
+		}
+	} else {
+		// Indented
+		if p.indent >= CodeIndent {
+			p.advanceOffset(CodeIndent, true)
+		} else if p.blank {
+			p.advanceNextNonspace()
+		} else {
+			return NotMatched
+		}
+	}
+	return Matched
+}
+
+func unescapeChar(str []byte) []byte {
+	// TODO: this is a no-op for a quick hack, needs more work
+	return str
+}
+
+func unescapeString(str []byte) []byte {
+	if reBackslashOrAmp.Match(str) {
+		return reEntityOrEscapedChar.ReplaceAllFunc(str, unescapeChar)
+	} else {
+		return str
+	}
+}
+
+func (h *CodeBlockHandler) Finalize(p *Parser, block *Node) {
+	if block.isFenced {
+		newlinePos := bytes.IndexByte(block.content, '\n')
+		firstLine := block.content[:newlinePos]
+		rest := block.content[newlinePos+1:]
+		block.info = unescapeString(bytes.Trim(firstLine, "\n"))
+		block.literal = rest
+	} else {
+		reTrailingWhitespace := regexp.MustCompile("(\n *)+$")
+		block.literal = reTrailingWhitespace.ReplaceAll(block.content, []byte{'\n'})
+	}
+	block.content = nil
+}
+
+func (h *CodeBlockHandler) CanContain(t NodeType) bool {
+	return false
+}
+
+func (h *CodeBlockHandler) AcceptsLines() bool {
+	return true
+}
+
 func atxHeaderTrigger(p *Parser, container *Node) BlockStatus {
 	match := reATXHeaderMarker.Find(p.currentLine[p.nextNonspace:])
 	if !p.indented && match != nil {
@@ -499,4 +582,34 @@ func endsWithBlankLine(block *Node) bool {
 		}
 	}
 	return false
+}
+
+func fencedCodeTrigger(p *Parser, unused *Node) BlockStatus {
+	if p.indented {
+		return NoMatch
+	}
+	match := reCodeFence.FindSubmatch(p.currentLine[p.nextNonspace:])
+	if match == nil {
+		return NoMatch
+	}
+	fenceLength := ulen(match[0])
+	p.closeUnmatchedBlocks()
+	container := p.addChild(CodeBlock, p.nextNonspace)
+	container.isFenced = true
+	container.fenceLength = fenceLength
+	container.fenceChar = match[0][0]
+	container.fenceOffset = p.indent
+	p.advanceNextNonspace()
+	p.advanceOffset(fenceLength, false)
+	return LeafMatch
+}
+
+func indentedCodeTrigger(p *Parser, unused *Node) BlockStatus {
+	if p.indented && p.tip.Type != Paragraph && !p.blank {
+		p.advanceOffset(CodeIndent, true)
+		p.closeUnmatchedBlocks()
+		p.addChild(CodeBlock, p.offset)
+		return LeafMatch
+	}
+	return NoMatch
 }

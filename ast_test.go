@@ -49,6 +49,15 @@ func TestAST2(t *testing.T) {
 
 		"B\n-\n",
 		"<h2>B</h2>\n",
+
+		"```\nfunc main() {}\n```  ",
+		"<pre><code>func main() {}\n</code></pre>\n",
+
+		"``` go\nfunc main() {}\n```  ",
+		"<pre><code>func main() {}\n</code></pre>\n",
+
+		"    def foo():\n        pass",
+		"<pre><code>def foo():\n    pass\n</code></pre>\n",
 	}
 	var candidate string
 	// catch and report panics

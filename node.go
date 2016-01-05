@@ -21,6 +21,7 @@ const (
 	Image
 	Text
 	HtmlBlock
+	CodeBlock
 )
 
 var nodeTypeNames = []string{
@@ -37,6 +38,7 @@ var nodeTypeNames = []string{
 	Image:          "Image",
 	Text:           "Text",
 	HtmlBlock:      "HtmlBlock",
+	CodeBlock:      "CodeBlock",
 }
 
 func (t NodeType) String() string {
@@ -55,8 +57,14 @@ type Node struct {
 	open          bool
 	lastLineBlank bool
 	literal       []byte
-	htmlBlockType int       // In case Type == HtmlBlock, this holds its type
-	listData      *ListData // In case Type == List, this holds list info
+	htmlBlockType int       // If Type == HtmlBlock, this holds its type
+	listData      *ListData // If Type == List, this holds list info
+	// TODO: move these fenced code block fields to a substruct
+	isFenced    bool   // If Type == CodeBlock, specifies whether it's a fenced code block or an indented one
+	info        []byte // If Type == CodeBlock, this holds the info string
+	fenceChar   byte
+	fenceLength uint32
+	fenceOffset uint32
 }
 
 func NewNode(typ NodeType) *Node {
