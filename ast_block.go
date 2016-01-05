@@ -319,7 +319,7 @@ func (h *CodeBlockHandler) Continue(p *Parser, container *Node) ContinueStatus {
 	if container.isFenced {
 		// Fenced
 		var match [][]byte
-		if p.indent <= 3 && p.currentLine[p.nextNonspace] == container.fenceChar {
+		if p.indent <= 3 && peek(p.currentLine, p.nextNonspace) == container.fenceChar {
 			match = reClosingCodeFence.FindSubmatch(p.currentLine[p.nextNonspace:])
 		}
 		if match != nil && ulen(match[0]) >= container.fenceLength {
