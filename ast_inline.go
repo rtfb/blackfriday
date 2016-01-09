@@ -6,18 +6,33 @@ import (
 )
 
 var (
-	reMain = regexp.MustCompile("^[^\\n`\\[\\]\\!<&*_'\"]+")
+	reMain           = regexp.MustCompile("^[^\\n`\\[\\]\\!<&*_'\"]+")
+	reWhitespaceChar = regexp.MustCompile("^\\s")
+	rePunctuation    = regexp.MustCompile("^[\u2000-\u206F\u2E00-\u2E7F\\'!\"#\\$%&\\(\\)\\*\\+,\\-\\.\\/:;<=>\\?@\\[\\]\\^_`\\{\\|\\}~]")
 )
 
 type InlineParser struct {
-	subject []byte
-	pos     int
+	subject    []byte
+	pos        int
+	delimiters *Delimiter
+}
+
+type Delimiter struct {
+	ch        byte
+	numDelims int
+	node      *Node
+	prev      *Delimiter
+	next      *Delimiter
+	canOpen   bool
+	canClose  bool
+	active    bool
 }
 
 func NewInlineParser() *InlineParser {
 	return &InlineParser{
-		subject: []byte{},
-		pos:     0,
+		subject:    []byte{},
+		pos:        0,
+		delimiters: nil,
 	}
 }
 
@@ -47,12 +62,70 @@ func (p *InlineParser) scanDelims(ch byte) (numDelims int, canOpen, canClose boo
 			p.pos += 1
 		}
 	}
+	if numDelims == 0 {
+		return 0, false, false
+	}
+	charBefore := byte('\n')
+	if startPos > 0 {
+		charBefore = p.subject[startPos-1]
+	}
+	charAfter := p.peek()
+	//cc_after = this.peek();
+	//if (cc_after === -1) {
+	//    char_after = '\n';
+	//} else {
+	//    char_after = fromCodePoint(cc_after);
+	//}
+	afterIsWhitespace := reWhitespaceChar.Match([]byte{charAfter})
+	afterIsPunctuation := rePunctuation.Match([]byte{charAfter})
+	beforeIsWhitespace := reWhitespaceChar.Match([]byte{charBefore})
+	beforeIsPunctuation := rePunctuation.Match([]byte{charBefore})
+	leftFlanking := !afterIsWhitespace && !(afterIsPunctuation && !beforeIsWhitespace && !beforeIsPunctuation)
+	rightFlanking := !beforeIsWhitespace && !(beforeIsPunctuation && !afterIsPunctuation && !afterIsPunctuation)
+	if ch == '_' {
+		canOpen = leftFlanking && (!rightFlanking || beforeIsPunctuation)
+		canClose = rightFlanking && (!leftFlanking || afterIsPunctuation)
+	} else if ch == '\'' || ch == '"' {
+		canOpen = leftFlanking && !rightFlanking
+		canClose = rightFlanking
+	} else {
+		canOpen = leftFlanking
+		canClose = rightFlanking
+	}
 	p.pos = startPos
-	return numDelims, false, false
+	return
+}
+
+func (p *InlineParser) pushDelim(delim *Delimiter) {
+	delim.prev = p.delimiters
+	delim.next = nil
+	p.delimiters = delim
+	if p.delimiters.prev != nil {
+		p.delimiters.prev.next = p.delimiters
+	}
+}
+
+func (p *InlineParser) removeDelimiter(delim *Delimiter) {
+	if delim.prev != nil {
+		delim.prev.next = delim.next
+	}
+	if delim.next == nil {
+		// top of stack
+		p.delimiters = delim.prev
+	} else {
+		delim.next.prev = delim.prev
+	}
+}
+
+func removeDelimitersBetween(bottom, top *Delimiter) {
+	for bottom.next != top {
+		bottom.next = top
+		top.prev = bottom
+	}
 }
 
 func (p *InlineParser) handleDelim(ch byte, block *Node) bool {
-	numDelims, _, _ := p.scanDelims(ch)
+	numDelims, canOpen, canClose := p.scanDelims(ch)
 	if numDelims < 1 {
 		return false
 	}
@@ -66,7 +139,14 @@ func (p *InlineParser) handleDelim(ch byte, block *Node) bool {
 	}
 	node := text(contents)
 	block.appendChild(node)
-	// TODO: add entry to stack
+	p.pushDelim(&Delimiter{
+		ch:        ch,
+		numDelims: numDelims,
+		node:      node,
+		canOpen:   canOpen,
+		canClose:  canClose,
+		active:    true,
+	})
 	return true
 }
 
@@ -101,13 +181,125 @@ func (p *InlineParser) parseInline(block *Node) bool {
 	return true
 }
 
-func (p *InlineParser) processEmphasis(stackBottom *Node) {
-	// TODO
+func isEmphasisChar(ch byte) bool {
+	return bytes.IndexByte([]byte{'_', '*', '\'', '"'}, ch) >= 0
+}
+
+func (p *InlineParser) processEmphasis(stackBottom *Delimiter) {
+	openersBottom := make(map[byte]*Delimiter)
+	openersBottom['_'] = stackBottom
+	openersBottom['*'] = stackBottom
+	openersBottom['\''] = stackBottom
+	openersBottom['"'] = stackBottom
+	// find first closer above stackBottom:
+	closer := p.delimiters
+	for closer != nil && closer.prev != stackBottom {
+		closer = closer.prev
+	}
+	// move forward, looking for closers, and handling each
+	for closer != nil {
+		if !(closer.canClose && isEmphasisChar(closer.ch)) {
+			closer = closer.next
+		} else {
+			// found emphasis closer. Now look back for first matching opener:
+			opener := closer.prev
+			openerFound := false
+			for opener != nil && opener != stackBottom && opener != openersBottom[closer.ch] {
+				if opener.ch == closer.ch && opener.canOpen {
+					openerFound = true
+					break
+				}
+				opener = opener.prev
+			}
+			oldCloser := closer
+			if closer.ch == '*' || closer.ch == '_' {
+				if !openerFound {
+					closer = closer.next
+				} else {
+					useDelims := 0
+					// calculate actual number of delimiters used from closer
+					if closer.numDelims < 3 || opener.numDelims < 3 {
+						useDelims = opener.numDelims
+						if closer.numDelims <= opener.numDelims {
+							useDelims = closer.numDelims
+						}
+					} else {
+						useDelims = 1
+						if closer.numDelims%2 == 0 {
+							useDelims = 2
+						}
+					}
+					openerInl := opener.node
+					closerInl := closer.node
+					// remove used delimiters from stack elts and inlines
+					opener.numDelims -= useDelims
+					closer.numDelims -= useDelims
+					openerInl.literal = openerInl.literal[:len(openerInl.literal)-useDelims]
+					closerInl.literal = closerInl.literal[:len(closerInl.literal)-useDelims]
+					// build contents for new emph element
+					nodeType := Strong
+					if useDelims == 1 {
+						nodeType = Emph
+					}
+					emph := NewNode(nodeType)
+					tmp := openerInl.next
+					for tmp != nil && tmp != closerInl {
+						next := tmp.next
+						tmp.unlink()
+						emph.appendChild(tmp)
+						tmp = next
+					}
+					openerInl.insertAfter(emph)
+					// remove elts between opener and closer in delimiters stack
+					removeDelimitersBetween(opener, closer)
+					// if opener has 0 delims, remove it and the inline
+					if opener.numDelims == 0 {
+						openerInl.unlink()
+						p.removeDelimiter(opener)
+					}
+					if closer.numDelims == 0 {
+						closerInl.unlink()
+						tempStack := closer.next
+						p.removeDelimiter(closer)
+						closer = tempStack
+					}
+				}
+			} else if closer.ch == '\'' {
+				closer.node.literal = []byte("\u2019")
+				if openerFound {
+					opener.node.literal = []byte("\u2018")
+				}
+				closer = closer.next
+			} else if closer.ch == '"' {
+				closer.node.literal = []byte("\u201D")
+				if openerFound {
+					opener.node.literal = []byte("\u201C")
+				}
+				closer = closer.next
+			}
+			if !openerFound {
+				// Set lower bound for future searches for openers:
+				if closer != nil {
+					openersBottom[closer.ch] = oldCloser.prev
+				}
+				if !oldCloser.canOpen {
+					// We can remove a closer that can't be an opener,
+					// once we've seen there's no matching opener:
+					p.removeDelimiter(oldCloser)
+				}
+			}
+		}
+	}
+	// remove all delimiters
+	for p.delimiters != nil && p.delimiters != stackBottom {
+		p.removeDelimiter(p.delimiters)
+	}
 }
 
 func (p *InlineParser) parse(block *Node) {
 	p.subject = bytes.Trim(block.content, " \n\r")
 	p.pos = 0
+	p.delimiters = nil
 	for p.parseInline(block) {
 	}
 	block.content = nil // allow raw string to be garbage collected
