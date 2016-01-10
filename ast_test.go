@@ -67,6 +67,9 @@ func TestAST2(t *testing.T) {
 
 		"## *Emphasised* header\n> quote",
 		"<h2><em>Emphasised</em> header</h2>\n\n<blockquote>\n<p>quote</p>\n</blockquote>\n",
+
+		"foo  \nbar",
+		"<p>foo<br />\nbar</p>\n",
 	}
 	var candidate string
 	// catch and report panics

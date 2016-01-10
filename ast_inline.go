@@ -9,6 +9,8 @@ var (
 	reMain           = regexp.MustCompile("^[^\\n`\\[\\]\\!<&*_'\"]+")
 	reWhitespaceChar = regexp.MustCompile("^\\s")
 	rePunctuation    = regexp.MustCompile("^[\u2000-\u206F\u2E00-\u2E7F\\'!\"#\\$%&\\(\\)\\*\\+,\\-\\.\\/:;<=>\\?@\\[\\]\\^_`\\{\\|\\}~]")
+	reFinalSpace     = regexp.MustCompile(" *$")
+	reInitialSpace   = regexp.MustCompile("^ *")
 )
 
 type InlineParser struct {
@@ -160,6 +162,47 @@ func (p *InlineParser) parseString(block *Node) bool {
 	return true
 }
 
+// Returns str[pos] with Pythonesque semantics for negative pos
+func peekPos(str []byte, pos int) byte {
+	if pos >= 0 {
+		return str[pos]
+	}
+	if len(str)+pos < 0 {
+		return 255 // XXX: figure out invalid values
+	}
+	return str[len(str)+pos]
+}
+
+// If re matches at current position in the subject, advance
+// position in subject and return the match; otherwise return nil.
+func (p *InlineParser) match(re *regexp.Regexp) []byte {
+	m := re.FindIndex(p.subject[p.pos:])
+	if m == nil {
+		return nil
+	}
+	p.pos += m[0] + m[1]
+	return p.subject[m[0]:m[1]]
+}
+
+func (p *InlineParser) parseNewline(block *Node) bool {
+	p.pos += 1 // assumer we're at a \n
+	// check previous node for trailing spaces
+	lastChild := block.lastChild
+	if lastChild != nil && lastChild.Type == Text && peekPos(lastChild.literal, -1) == ' ' {
+		hardBreak := peekPos(lastChild.literal, -2) == ' '
+		lastChild.literal = reFinalSpace.ReplaceAll(lastChild.literal, []byte{})
+		childType := Softbreak
+		if hardBreak {
+			childType = Hardbreak
+		}
+		block.appendChild(NewNode(childType))
+	} else {
+		block.appendChild(NewNode(Softbreak))
+	}
+	p.match(reInitialSpace) // gobble leading spaces in next line
+	return true
+}
+
 func (p *InlineParser) parseInline(block *Node) bool {
 	res := false
 	ch := p.peek()
@@ -167,6 +210,8 @@ func (p *InlineParser) parseInline(block *Node) bool {
 		return false
 	}
 	switch ch {
+	case '\n':
+		res = p.parseNewline(block)
 	case '*', '_':
 		res = p.handleDelim(ch, block)
 		break

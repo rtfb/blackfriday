@@ -45,6 +45,12 @@ func render(ast *Node) []byte {
 		case Text:
 			out(esc(node.literal, false))
 			break
+		case Softbreak:
+			out([]byte("\n"))
+			// TODO: make it configurable via out(renderer.softbreak)
+		case Hardbreak:
+			out(tag("br", nil, true))
+			cr()
 		case Emph:
 			if entering {
 				out(tag("em", nil, false))

@@ -22,6 +22,8 @@ const (
 	Text
 	HtmlBlock
 	CodeBlock
+	Softbreak
+	Hardbreak
 )
 
 var nodeTypeNames = []string{
@@ -39,6 +41,8 @@ var nodeTypeNames = []string{
 	Text:           "Text",
 	HtmlBlock:      "HtmlBlock",
 	CodeBlock:      "CodeBlock",
+	Softbreak:      "Softbreak",
+	Hardbreak:      "Hardbreak",
 }
 
 func (t NodeType) String() string {
