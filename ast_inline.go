@@ -6,11 +6,12 @@ import (
 )
 
 var (
-	reMain           = regexp.MustCompile("^[^\\n`\\[\\]\\!<&*_'\"]+")
+	reMain           = regexp.MustCompile("^[^\\n`\\\\[\\]\\!<&*_'\"]+")
 	reWhitespaceChar = regexp.MustCompile("^\\s")
 	rePunctuation    = regexp.MustCompile("^[\u2000-\u206F\u2E00-\u2E7F\\'!\"#\\$%&\\(\\)\\*\\+,\\-\\.\\/:;<=>\\?@\\[\\]\\^_`\\{\\|\\}~]")
 	reFinalSpace     = regexp.MustCompile(" *$")
 	reInitialSpace   = regexp.MustCompile("^ *")
+	reEscapable      = regexp.MustCompile("^" + Escapable)
 )
 
 type InlineParser struct {
@@ -50,6 +51,11 @@ func (p *InlineParser) peek() byte {
 		return p.subject[p.pos]
 	}
 	return 255 // XXX: figure out invalid values
+}
+
+// peekSlice() is the same as peek(), but returns a slice
+func (p *InlineParser) peekSlice() []byte {
+	return []byte{p.peek()}
 }
 
 func (p *InlineParser) scanDelims(ch byte) (numDelims int, canOpen, canClose bool) {
@@ -203,6 +209,24 @@ func (p *InlineParser) parseNewline(block *Node) bool {
 	return true
 }
 
+// Parse a backslash-escaped special character, adding either the escaped
+// character, a hard line break (if the backslash is followed by a newline),
+// or a literal backslash to the block's children.  Assumes current character
+// is a backslash.
+func (p *InlineParser) parseBackslash(block *Node) bool {
+	p.pos += 1
+	if p.peek() == '\n' {
+		block.appendChild(NewNode(Hardbreak))
+		p.pos += 1
+	} else if reEscapable.Match(p.peekSlice()) {
+		block.appendChild(text(p.peekSlice()))
+		p.pos += 1
+	} else {
+		block.appendChild(text([]byte{'\\'}))
+	}
+	return true
+}
+
 func (p *InlineParser) parseInline(block *Node) bool {
 	res := false
 	ch := p.peek()
@@ -212,6 +236,8 @@ func (p *InlineParser) parseInline(block *Node) bool {
 	switch ch {
 	case '\n':
 		res = p.parseNewline(block)
+	case '\\':
+		res = p.parseBackslash(block)
 	case '*', '_':
 		res = p.handleDelim(ch, block)
 		break
