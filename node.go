@@ -24,6 +24,7 @@ const (
 	CodeBlock
 	Softbreak
 	Hardbreak
+	Code
 )
 
 var nodeTypeNames = []string{
@@ -43,6 +44,7 @@ var nodeTypeNames = []string{
 	CodeBlock:      "CodeBlock",
 	Softbreak:      "Softbreak",
 	Hardbreak:      "Hardbreak",
+	Code:           "Code",
 }
 
 func (t NodeType) String() string {

@@ -8,10 +8,13 @@ import (
 var (
 	reMain           = regexp.MustCompile("^[^\\n`\\\\[\\]\\!<&*_'\"]+")
 	reWhitespaceChar = regexp.MustCompile("^\\s")
+	reWhitespace     = regexp.MustCompile("\\s+")
 	rePunctuation    = regexp.MustCompile("^[\u2000-\u206F\u2E00-\u2E7F\\'!\"#\\$%&\\(\\)\\*\\+,\\-\\.\\/:;<=>\\?@\\[\\]\\^_`\\{\\|\\}~]")
 	reFinalSpace     = regexp.MustCompile(" *$")
 	reInitialSpace   = regexp.MustCompile("^ *")
 	reEscapable      = regexp.MustCompile("^" + Escapable)
+	reTicksHere      = regexp.MustCompile("^`+")
+	reTicks          = regexp.MustCompile("`+")
 )
 
 type InlineParser struct {
@@ -186,12 +189,13 @@ func (p *InlineParser) match(re *regexp.Regexp) []byte {
 	if m == nil {
 		return nil
 	}
-	p.pos += m[0] + m[1]
-	return p.subject[m[0]:m[1]]
+	ret := p.subject[p.pos+m[0] : p.pos+m[1]]
+	p.pos += m[1]
+	return ret
 }
 
 func (p *InlineParser) parseNewline(block *Node) bool {
-	p.pos += 1 // assumer we're at a \n
+	p.pos += 1 // assume we're at a \n
 	// check previous node for trailing spaces
 	lastChild := block.lastChild
 	if lastChild != nil && lastChild.Type == Text && peekPos(lastChild.literal, -1) == ' ' {
@@ -227,6 +231,29 @@ func (p *InlineParser) parseBackslash(block *Node) bool {
 	return true
 }
 
+// Attempt to parse backticks, adding either a backtick code span or a
+// literal sequence of backticks.
+func (p *InlineParser) parseBackticks(block *Node) bool {
+	ticks := p.match(reTicksHere)
+	if ticks == nil {
+		return false
+	}
+	afterOpenTicks := p.pos
+	matched := p.match(reTicks)
+	for matched != nil {
+		if bytes.Equal(matched, ticks) {
+			node := NewNode(Code)
+			node.literal = reWhitespace.ReplaceAll(bytes.TrimSpace(p.subject[afterOpenTicks:p.pos-len(ticks)]), []byte{' '})
+			block.appendChild(node)
+			return true
+		}
+	}
+	// If we got here, we didn't match a closing backtick sequence.
+	p.pos = afterOpenTicks
+	block.appendChild(text(ticks))
+	return true
+}
+
 func (p *InlineParser) parseInline(block *Node) bool {
 	res := false
 	ch := p.peek()
@@ -238,6 +265,8 @@ func (p *InlineParser) parseInline(block *Node) bool {
 		res = p.parseNewline(block)
 	case '\\':
 		res = p.parseBackslash(block)
+	case '`':
+		res = p.parseBackticks(block)
 	case '*', '_':
 		res = p.handleDelim(ch, block)
 		break

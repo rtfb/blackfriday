@@ -65,6 +65,10 @@ func render(ast *Node) []byte {
 				out(tag("/strong", nil, false))
 			}
 			break
+		case Code:
+			out(tag("code", nil, false))
+			out(esc(node.literal, false))
+			out(tag("/code", nil, false))
 		case Document:
 			break
 		case Paragraph:

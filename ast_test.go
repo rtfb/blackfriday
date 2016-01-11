@@ -81,6 +81,16 @@ func TestAST2(t *testing.T) {
 
 		`foo\*bar`,
 		"<p>foo*bar</p>\n",
+
+		// backticks
+		"foo `moo",
+		"<p>foo `moo</p>\n",
+
+		"foo `bar`",
+		"<p>foo <code>bar</code></p>\n",
+
+		"some ``  spaced    out   code ``",
+		"<p>some <code>spaced out code</code></p>\n",
 	}
 	var candidate string
 	// catch and report panics
