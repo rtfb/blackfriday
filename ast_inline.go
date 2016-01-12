@@ -247,6 +247,7 @@ func (p *InlineParser) parseBackticks(block *Node) bool {
 			block.appendChild(node)
 			return true
 		}
+		matched = p.match(reTicks)
 	}
 	// If we got here, we didn't match a closing backtick sequence.
 	p.pos = afterOpenTicks
