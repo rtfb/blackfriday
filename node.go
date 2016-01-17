@@ -25,6 +25,7 @@ const (
 	Softbreak
 	Hardbreak
 	Code
+	HtmlSpan
 )
 
 var nodeTypeNames = []string{
@@ -45,6 +46,7 @@ var nodeTypeNames = []string{
 	Softbreak:      "Softbreak",
 	Hardbreak:      "Hardbreak",
 	Code:           "Code",
+	HtmlSpan:       "HtmlSpan",
 }
 
 func (t NodeType) String() string {
@@ -71,6 +73,9 @@ type Node struct {
 	fenceChar   byte
 	fenceLength uint32
 	fenceOffset uint32
+	// Link fields:
+	destination []byte
+	title       []byte
 }
 
 func NewNode(typ NodeType) *Node {

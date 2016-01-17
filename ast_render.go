@@ -3,12 +3,13 @@ package blackfriday
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 func tag(name string, attrs []string, selfClosing bool) []byte {
 	result := "<" + name
 	if attrs != nil && len(attrs) > 0 {
-		// TODO
+		result += " " + strings.Join(attrs, " ")
 	}
 	if selfClosing {
 		result += " /"
@@ -65,6 +66,24 @@ func render(ast *Node) []byte {
 				out(tag("/strong", nil, false))
 			}
 			break
+		case HtmlSpan:
+			//if options.safe {
+			//	out("<!-- raw HTML omitted -->")
+			//} else {
+			out(node.literal)
+			//}
+		case Link:
+			if entering {
+				//if (!(options.safe && potentiallyUnsafe(node.destination))) {
+				attrs = append(attrs, fmt.Sprintf("href=%q", esc(node.destination, true)))
+				//}
+				if node.title != nil {
+					attrs = append(attrs, fmt.Sprintf("title=%q", esc(node.title, true)))
+				}
+				out(tag("a", attrs, false))
+			} else {
+				out(tag("/a", nil, false))
+			}
 		case Code:
 			out(tag("code", nil, false))
 			out(esc(node.literal, false))

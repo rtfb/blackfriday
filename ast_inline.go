@@ -5,6 +5,15 @@ import (
 	"regexp"
 )
 
+const (
+	HTMLComment           = "<!---->|<!--(?:-?[^>-])(?:-?[^-])*-->"
+	ProcessingInstruction = "[<][?].*?[?][>]"
+	Declaration           = "<![A-Z]+" + "\\s+[^>]*>"
+	CDATA                 = "<!\\[CDATA\\[[\\s\\S]*?\\]\\]>"
+	HTMLTag               = "(?:" + OpenTag + "|" + CloseTag + "|" + HTMLComment + "|" +
+		ProcessingInstruction + "|" + Declaration + "|" + CDATA + ")"
+)
+
 var (
 	reMain           = regexp.MustCompile("^[^\\n`\\\\[\\]\\!<&*_'\"]+")
 	reWhitespaceChar = regexp.MustCompile("^\\s")
@@ -15,6 +24,9 @@ var (
 	reEscapable      = regexp.MustCompile("^" + Escapable)
 	reTicksHere      = regexp.MustCompile("^`+")
 	reTicks          = regexp.MustCompile("`+")
+	reEmailAutolink  = regexp.MustCompile("^<([a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>")
+	reAutolink       = regexp.MustCompile("(?i)^<(?:coap|doi|javascript|aaa|aaas|about|acap|cap|cid|crid|data|dav|dict|dns|file|ftp|geo|go|gopher|h323|http|https|iax|icap|im|imap|info|ipp|iris|iris.beep|iris.xpc|iris.xpcs|iris.lwz|ldap|mailto|mid|msrp|msrps|mtqp|mupdate|news|nfs|ni|nih|nntp|opaquelocktoken|pop|pres|rtsp|service|session|shttp|sieve|sip|sips|sms|snmp|soap.beep|soap.beeps|tag|tel|telnet|tftp|thismessage|tn3270|tip|tv|urn|vemmi|ws|wss|xcon|xcon-userid|xmlrpc.beep|xmlrpc.beeps|xmpp|z39.50r|z39.50s|adiumxtra|afp|afs|aim|apt|attachment|aw|beshare|bitcoin|bolo|callto|chrome|chrome-extension|com-eventbrite-attendee|content|cvs|dlna-playsingle|dlna-playcontainer|dtn|dvb|ed2k|facetime|feed|finger|fish|gg|git|gizmoproject|gtalk|hcp|icon|ipn|irc|irc6|ircs|itms|jar|jms|keyparc|lastfm|ldaps|magnet|maps|market|message|mms|ms-help|msnim|mumble|mvn|notes|oid|palm|paparazzi|platform|proxy|psyc|query|res|resource|rmi|rsync|rtmp|secondlife|sftp|sgn|skype|smb|soldat|spotify|ssh|steam|svn|teamspeak|things|udp|unreal|ut2004|ventrilo|view-source|webcal|wtai|wyciwyg|xfire|xri|ymsgr):[^<>\x00-\x20]*>")
+	reHtmlTag          = regexp.MustCompile("(?i)^" + HTMLTag)
 )
 
 type InlineParser struct {
@@ -47,6 +59,10 @@ func text(s []byte) *Node {
 	node := NewNode(Text)
 	node.literal = s
 	return node
+}
+
+func normalizeURI(s []byte) []byte {
+	return s // TODO: implement
 }
 
 func (p *InlineParser) peek() byte {
@@ -231,6 +247,42 @@ func (p *InlineParser) parseBackslash(block *Node) bool {
 	return true
 }
 
+// Attempt to parse an autolink (URL or email in pointy brackets).
+func (p *InlineParser) parseAutolink(block *Node) bool {
+	m := p.match(reEmailAutolink)
+	if m != nil {
+		dest := m[1 : len(m)-1]
+		node := NewNode(Link)
+		//node.destination = normalizeURI([]byte("mailto:") + dest)
+		node.destination = normalizeURI(append([]byte("mailto:"), dest...))
+		node.appendChild(text(dest))
+		block.appendChild(node)
+		return true
+	}
+	m = p.match(reAutolink)
+	if m != nil {
+		dest := m[1 : len(m)-1]
+		node := NewNode(Link)
+		node.destination = normalizeURI(dest)
+		node.appendChild(text(dest))
+		block.appendChild(node)
+		return true
+	}
+	return false
+}
+
+// Attempt to parse a raw HTML tag.
+func (p *InlineParser) parseHtmlTag(block *Node) bool {
+	m := p.match(reHtmlTag)
+	if m == nil {
+		return false
+	}
+	node := NewNode(HtmlSpan)
+	node.literal = m
+	block.appendChild(node)
+	return true
+}
+
 // Attempt to parse backticks, adding either a backtick code span or a
 // literal sequence of backticks.
 func (p *InlineParser) parseBackticks(block *Node) bool {
@@ -271,6 +323,8 @@ func (p *InlineParser) parseInline(block *Node) bool {
 	case '*', '_':
 		res = p.handleDelim(ch, block)
 		break
+	case '<':
+		res = p.parseAutolink(block) || p.parseHtmlTag(block)
 	default:
 		res = p.parseString(block)
 		break

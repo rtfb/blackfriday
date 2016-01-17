@@ -91,6 +91,26 @@ func TestAST2(t *testing.T) {
 
 		"some ``  spaced    out   code ``",
 		"<p>some <code>spaced out code</code></p>\n",
+
+		// autolink
+		"an email <some@one.com>\n",
+		"<p>an email <a href=\"mailto:some@one.com\">some@one.com</a></p>\n",
+
+		// XXX: Note there's a difference in behavior between Common Mark and
+		// current Blackfriday behavior here: current Blackfriday strips
+		// "mailto:" part in the line text, while Common Mark preserves it.
+		"an email <mailto:some@one.com>\n",
+		"<p>an email <a href=\"mailto:some@one.com\">mailto:some@one.com</a></p>\n",
+
+		"some <http://hyperlink.com>",
+		"<p>some <a href=\"http://hyperlink.com\">http://hyperlink.com</a></p>\n",
+
+		// inline html
+		"inline <span>html</span>",
+		"<p>inline <span>html</span></p>\n",
+
+		"Hello <!-- there -->",
+		"<p>Hello <!-- there --></p>\n",
 	}
 	var candidate string
 	// catch and report panics
