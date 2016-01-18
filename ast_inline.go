@@ -2,6 +2,7 @@ package blackfriday
 
 import (
 	"bytes"
+	"html"
 	"regexp"
 )
 
@@ -24,6 +25,7 @@ var (
 	reEscapable      = regexp.MustCompile("^" + Escapable)
 	reTicksHere      = regexp.MustCompile("^`+")
 	reTicks          = regexp.MustCompile("`+")
+	reEntityHere     = regexp.MustCompile("(?i)^" + Entity)
 	reEmailAutolink  = regexp.MustCompile("^<([a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>")
 	reAutolink       = regexp.MustCompile("(?i)^<(?:coap|doi|javascript|aaa|aaas|about|acap|cap|cid|crid|data|dav|dict|dns|file|ftp|geo|go|gopher|h323|http|https|iax|icap|im|imap|info|ipp|iris|iris.beep|iris.xpc|iris.xpcs|iris.lwz|ldap|mailto|mid|msrp|msrps|mtqp|mupdate|news|nfs|ni|nih|nntp|opaquelocktoken|pop|pres|rtsp|service|session|shttp|sieve|sip|sips|sms|snmp|soap.beep|soap.beeps|tag|tel|telnet|tftp|thismessage|tn3270|tip|tv|urn|vemmi|ws|wss|xcon|xcon-userid|xmlrpc.beep|xmlrpc.beeps|xmpp|z39.50r|z39.50s|adiumxtra|afp|afs|aim|apt|attachment|aw|beshare|bitcoin|bolo|callto|chrome|chrome-extension|com-eventbrite-attendee|content|cvs|dlna-playsingle|dlna-playcontainer|dtn|dvb|ed2k|facetime|feed|finger|fish|gg|git|gizmoproject|gtalk|hcp|icon|ipn|irc|irc6|ircs|itms|jar|jms|keyparc|lastfm|ldaps|magnet|maps|market|message|mms|ms-help|msnim|mumble|mvn|notes|oid|palm|paparazzi|platform|proxy|psyc|query|res|resource|rmi|rsync|rtmp|secondlife|sftp|sgn|skype|smb|soldat|spotify|ssh|steam|svn|teamspeak|things|udp|unreal|ut2004|ventrilo|view-source|webcal|wtai|wyciwyg|xfire|xri|ymsgr):[^<>\x00-\x20]*>")
 	reHtmlTag          = regexp.MustCompile("(?i)^" + HTMLTag)
@@ -307,6 +309,36 @@ func (p *InlineParser) parseBackticks(block *Node) bool {
 	return true
 }
 
+// First, unescape every HTML entity, then escape several unsafe chars back
+func decodeHTML(str []byte) []byte {
+	var buff bytes.Buffer
+	for _, b := range []byte(html.UnescapeString(string(str))) {
+		switch b {
+		case '&':
+			buff.Write([]byte("&amp;"))
+		case '<':
+			buff.Write([]byte("&lt;"))
+		case '>':
+			buff.Write([]byte("&gt;"))
+		case '"':
+			buff.Write([]byte("&quot;"))
+		default:
+			buff.WriteByte(b)
+		}
+	}
+	return buff.Bytes()
+}
+
+// Attempt to parse an entity.
+func (p *InlineParser) parseEntity(block *Node) bool {
+	m := p.match(reEntityHere)
+	if m == nil {
+		return false
+	}
+	block.appendChild(text(decodeHTML(m)))
+	return true
+}
+
 func (p *InlineParser) parseInline(block *Node) bool {
 	res := false
 	ch := p.peek()
@@ -325,6 +357,8 @@ func (p *InlineParser) parseInline(block *Node) bool {
 		break
 	case '<':
 		res = p.parseAutolink(block) || p.parseHtmlTag(block)
+	case '&':
+		res = p.parseEntity(block)
 	default:
 		res = p.parseString(block)
 		break

@@ -111,6 +111,16 @@ func TestAST2(t *testing.T) {
 
 		"Hello <!-- there -->",
 		"<p>Hello <!-- there --></p>\n",
+
+		// entities
+		"&lt;&gt;",
+		"<p>&lt;&gt;</p>\n",
+
+		"&#35;",
+		"<p>#</p>\n",
+
+		"&amp;&quot;&lt;&gt;",
+		"<p>&amp;&quot;&lt;&gt;</p>\n",
 	}
 	var candidate string
 	// catch and report panics
