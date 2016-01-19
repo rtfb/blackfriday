@@ -2,6 +2,7 @@ package blackfriday
 
 import (
 	"bytes"
+	"html"
 	"regexp"
 	"strconv"
 )
@@ -346,8 +347,10 @@ func (h *CodeBlockHandler) Continue(p *Parser, container *Node) ContinueStatus {
 }
 
 func unescapeChar(str []byte) []byte {
-	// TODO: this is a no-op for a quick hack, needs more work
-	return str
+	if str[0] == '\\' {
+		return []byte{str[1]}
+	}
+	return []byte(html.UnescapeString(string(str)))
 }
 
 func unescapeString(str []byte) []byte {
