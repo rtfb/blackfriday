@@ -121,6 +121,16 @@ func TestAST2(t *testing.T) {
 
 		"&amp;&quot;&lt;&gt;",
 		"<p>&amp;&quot;&lt;&gt;</p>\n",
+
+		// links
+		"![foo](/bar/ \"title\")\n",
+		"<p><img src=\"/bar/\" alt=\"foo\" title=\"title\" /></p>\n",
+
+		"![foo](/bar/)\n",
+		"<p><img src=\"/bar/\" alt=\"foo\" /></p>\n",
+
+		"[link](url)\n",
+		"<p><a href=\"url\">link</a></p>\n",
 	}
 	var candidate string
 	// catch and report panics

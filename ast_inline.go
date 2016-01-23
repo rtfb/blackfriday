@@ -7,6 +7,9 @@ import (
 )
 
 const (
+	EscapedChar           = "\\\\" + Escapable
+	RegChar               = "[^\\\\()\\x00-\\x20]"
+	InParensNoSp          = "\\((" + RegChar + "|" + EscapedChar + "|\\\\)*\\)"
 	HTMLComment           = "<!---->|<!--(?:-?[^>-])(?:-?[^-])*-->"
 	ProcessingInstruction = "[<][?].*?[?][>]"
 	Declaration           = "<![A-Z]+" + "\\s+[^>]*>"
@@ -28,6 +31,19 @@ var (
 	reEntityHere     = regexp.MustCompile("(?i)^" + Entity)
 	reEmailAutolink  = regexp.MustCompile("^<([a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>")
 	reAutolink       = regexp.MustCompile("(?i)^<(?:coap|doi|javascript|aaa|aaas|about|acap|cap|cid|crid|data|dav|dict|dns|file|ftp|geo|go|gopher|h323|http|https|iax|icap|im|imap|info|ipp|iris|iris.beep|iris.xpc|iris.xpcs|iris.lwz|ldap|mailto|mid|msrp|msrps|mtqp|mupdate|news|nfs|ni|nih|nntp|opaquelocktoken|pop|pres|rtsp|service|session|shttp|sieve|sip|sips|sms|snmp|soap.beep|soap.beeps|tag|tel|telnet|tftp|thismessage|tn3270|tip|tv|urn|vemmi|ws|wss|xcon|xcon-userid|xmlrpc.beep|xmlrpc.beeps|xmpp|z39.50r|z39.50s|adiumxtra|afp|afs|aim|apt|attachment|aw|beshare|bitcoin|bolo|callto|chrome|chrome-extension|com-eventbrite-attendee|content|cvs|dlna-playsingle|dlna-playcontainer|dtn|dvb|ed2k|facetime|feed|finger|fish|gg|git|gizmoproject|gtalk|hcp|icon|ipn|irc|irc6|ircs|itms|jar|jms|keyparc|lastfm|ldaps|magnet|maps|market|message|mms|ms-help|msnim|mumble|mvn|notes|oid|palm|paparazzi|platform|proxy|psyc|query|res|resource|rmi|rsync|rtmp|secondlife|sftp|sgn|skype|smb|soldat|spotify|ssh|steam|svn|teamspeak|things|udp|unreal|ut2004|ventrilo|view-source|webcal|wtai|wyciwyg|xfire|xri|ymsgr):[^<>\x00-\x20]*>")
+	reLinkTitle      = regexp.MustCompile(
+		"^(?:\"(" + EscapedChar + "|[^\"\\x00])*\"" +
+			"|" +
+			"'(" + EscapedChar + "|[^'\\x00])*'" +
+			"|" +
+			"\\((" + EscapedChar + "|[^)\\x00])*\\))")
+	reLinkDestinationBraces = regexp.MustCompile(
+		"^(?:[<](?:[^<>\\n\\\\\\x00]" + "|" + EscapedChar + "|" + "\\\\)*[>])")
+	reLinkDestination = regexp.MustCompile(
+		"^(?:" + RegChar + "+|" + EscapedChar + "|\\\\|" + InParensNoSp + ")*")
+	reLinkLabel        = regexp.MustCompile("^\\[(?:[^\\\\\\[\\]]|" + EscapedChar + "|\\\\){0,1000}\\]")
+	reSpnl             = regexp.MustCompile("^ *(?:\n *)?")
+	reSpaceAtEndOfLine = regexp.MustCompile("^ *(?:\n|$)")
 	reHtmlTag          = regexp.MustCompile("(?i)^" + HTMLTag)
 )
 
@@ -35,11 +51,13 @@ type InlineParser struct {
 	subject    []byte
 	pos        int
 	delimiters *Delimiter
+	refmap     RefMap
 }
 
 type Delimiter struct {
 	ch        byte
 	numDelims int
+	index     int
 	node      *Node
 	prev      *Delimiter
 	next      *Delimiter
@@ -64,6 +82,10 @@ func text(s []byte) *Node {
 }
 
 func normalizeURI(s []byte) []byte {
+	return s // TODO: implement
+}
+
+func normalizeReference(s []byte) []byte {
 	return s // TODO: implement
 }
 
@@ -309,6 +331,171 @@ func (p *InlineParser) parseBackticks(block *Node) bool {
 	return true
 }
 
+func (p *InlineParser) parseOpenBracket(block *Node) bool {
+	startPos := p.pos
+	p.pos += 1
+	node := text([]byte{'['})
+	block.appendChild(node)
+	p.pushDelim(&Delimiter{
+		ch:        '[',
+		numDelims: 1,
+		node:      node,
+		canOpen:   true,
+		canClose:  false,
+		index:     startPos,
+		active:    true,
+	})
+	return true
+}
+
+// IF next character is [, add ! delimiter to delimiter stack and
+// add a text node to block's children.  Otherwise just add a text node.
+func (p *InlineParser) parseBang(block *Node) bool {
+	startPos := p.pos
+	p.pos += 1
+	if p.peek() == '[' {
+		p.pos += 1
+		node := text([]byte("!["))
+		block.appendChild(node)
+		p.pushDelim(&Delimiter{
+			ch:        '!',
+			numDelims: 1,
+			node:      node,
+			canOpen:   true,
+			canClose:  false,
+			index:     startPos + 1,
+			active:    true,
+		})
+	} else {
+		block.appendChild(text([]byte{'!'}))
+	}
+	return true
+}
+
+func (p *InlineParser) parseLinkDestAndTitle() (dest, title []byte, ok bool) {
+	if !p.spnl() {
+		return nil, nil, false
+	}
+	dest = p.parseLinkDestination()
+	if dest == nil {
+		return nil, nil, false
+	}
+	if !p.spnl() {
+		return nil, nil, false
+	}
+	// make sure there's a space before the title:
+	haveWhitespace := reWhitespaceChar.Match([]byte{p.subject[p.pos-1]})
+	if haveWhitespace {
+		title = p.parseLinkTitle()
+	}
+	return dest, title, (p.spnl() && p.peek() == ')')
+}
+
+// Try to match close bracket against an opening in the delimiter
+// stack.  Add either a link or image, or a plain [ character,
+// to block's children.  If there is a matching delimiter,
+// remove it from the delimiter stack.
+func (p *InlineParser) parseCloseBracket(block *Node) bool {
+	var dest, title []byte
+	var matched bool
+	p.pos++
+	startPos := p.pos
+	// look through stack of delimiters for a [ or ![
+	opener := p.delimiters
+	for opener != nil {
+		if opener.ch == '[' || opener.ch == '!' {
+			break
+		}
+		opener = opener.prev
+	}
+	if opener == nil {
+		block.appendChild(text([]byte{']'}))
+		return true
+	}
+	if !opener.active {
+		// no matched opener, just return a literal
+		block.appendChild(text([]byte{']'}))
+		// take opener off emphasis stack
+		p.removeDelimiter(opener)
+		return true
+	}
+	// If we got here, open is a potential opener
+	isImage := opener.ch == '!'
+	// Check to see if we have a link/image
+	if p.peek() == '(' {
+		// Inline link?
+		p.pos++
+		var ok bool
+		dest, title, ok = p.parseLinkDestAndTitle()
+		if ok {
+			p.pos++
+			matched = true
+		}
+	} else {
+		// Next, see if there's a link label
+		savePos := p.pos
+		p.spnl()
+		beforeLabel := p.pos
+		n := int(p.parseLinkLabel()) // XXX: int-uint32 mismatch
+		var reflabel []byte
+		if n == 0 || n == 2 {
+			// empty or missing second label
+			reflabel = p.subject[opener.index:startPos]
+		} else {
+			reflabel = p.subject[beforeLabel : beforeLabel+n]
+		}
+		if n == 0 {
+			// If shortcut reference link, rewind before spaces we skipped.
+			p.pos = savePos
+		}
+		// lookup rawlabel in refmap
+		link := p.refmap[string(normalizeReference(reflabel))]
+		if link != nil {
+			dest = link.Dest
+			title = link.Title
+			matched = true
+		}
+	}
+	if matched {
+		nodeType := Link
+		if isImage {
+			nodeType = Image
+		}
+		node := NewNode(nodeType)
+		node.destination = dest
+		node.title = title
+		tmp := opener.node.next
+		for tmp != nil {
+			next := tmp.next
+			tmp.unlink()
+			node.appendChild(tmp)
+			tmp = next
+		}
+		block.appendChild(node)
+		p.processEmphasis(opener.prev)
+		opener.node.unlink()
+		// processEmphasis will remove this and later delimiters.
+		// Now, for a link, we also deactivate earlier link openers.
+		// (no links in links)
+		if !isImage {
+			opener = p.delimiters
+			for opener != nil {
+				if opener.ch == '[' {
+					opener.active = false // deactivate this opener
+				}
+				opener = opener.prev
+			}
+		}
+		return true
+	} else {
+		p.removeDelimiter(opener)
+		p.pos = startPos
+		block.appendChild(text([]byte{']'}))
+		return true
+	}
+	return false
+}
+
 // First, unescape every HTML entity, then escape several unsafe chars back
 func decodeHTML(str []byte) []byte {
 	var buff bytes.Buffer
@@ -339,6 +526,113 @@ func (p *InlineParser) parseEntity(block *Node) bool {
 	return true
 }
 
+// Attempt to parse link title (sans quotes), returning the string
+// or null if no match.
+func (p *InlineParser) parseLinkTitle() []byte {
+	title := p.match(reLinkTitle)
+	if title == nil {
+		return nil
+	}
+	// chop off quotes from title and unescape:
+	return unescapeString(title[1 : len(title)-1])
+}
+
+// Attempt to parse link destination, returning the string or
+// null if no match.
+func (p *InlineParser) parseLinkDestination() []byte {
+	res := p.match(reLinkDestinationBraces)
+	if res == nil {
+		res = p.match(reLinkDestination)
+		if res == nil {
+			return nil
+		} else {
+			return normalizeURI(unescapeString(res))
+		}
+	} else { // chop off surrounding <..>:
+		return normalizeURI(unescapeString(res[1 : len(res)-2]))
+	}
+}
+
+// Attempt to parse a link label, returning number of characters parsed.
+func (p *InlineParser) parseLinkLabel() uint32 {
+	m := p.match(reLinkLabel)
+	if m == nil || len(m) > 1001 {
+		return 0
+	}
+	return ulen(m)
+}
+
+// Parse zero or more space characters, including at most one newline
+func (p *InlineParser) spnl() bool {
+	p.match(reSpnl)
+	return true
+}
+
+func (p *InlineParser) parseReference(s []byte, refmap RefMap) int {
+	p.pos = 0
+	startPos := p.pos
+	// label:
+	matchChars := p.parseLinkLabel()
+	var rawLabel []byte
+	if matchChars == 0 {
+		return 0
+	} else {
+		rawLabel = p.subject[:matchChars]
+	}
+	// colon:
+	if p.peek() == ':' {
+		p.pos++
+	} else {
+		p.pos = startPos
+		return 0
+	}
+	// link url
+	p.spnl()
+	dest := p.parseLinkDestination()
+	if dest == nil || len(dest) == 0 {
+		p.pos = startPos
+		return 0
+	}
+	beforeTitle := p.pos
+	p.spnl()
+	title := p.parseLinkTitle()
+	if title == nil {
+		title = []byte{}
+		// rewind before spaces
+		p.pos = beforeTitle
+	}
+	// make sure we're at line end:
+	atLineEnd := true
+	if p.match(reSpaceAtEndOfLine) == nil {
+		if bytes.Equal(title, []byte{}) {
+			atLineEnd = false
+		} else {
+			// the potential title we found is not at the line end,
+			// but it could still be a legal link reference if we
+			// discard the title
+			title = []byte{}
+			// rewind before spaces
+			p.pos = beforeTitle
+			// and instead check if the link URL is at the line end
+			atLineEnd = p.match(reSpaceAtEndOfLine) != nil
+		}
+	}
+	if !atLineEnd {
+		p.pos = startPos
+		return 0
+	}
+	normLabel := string(normalizeReference(rawLabel))
+	if normLabel == "" {
+		// label must contain non-whitespace characters
+		p.pos = startPos
+		return 0
+	}
+	if _, ok := refmap[normLabel]; !ok {
+		refmap[normLabel] = &Ref{Dest: dest, Title: title}
+	}
+	return p.pos - startPos
+}
+
 func (p *InlineParser) parseInline(block *Node) bool {
 	res := false
 	ch := p.peek()
@@ -355,6 +649,12 @@ func (p *InlineParser) parseInline(block *Node) bool {
 	case '*', '_':
 		res = p.handleDelim(ch, block)
 		break
+	case '[':
+		res = p.parseOpenBracket(block)
+	case '!':
+		res = p.parseBang(block)
+	case ']':
+		res = p.parseCloseBracket(block)
 	case '<':
 		res = p.parseAutolink(block) || p.parseHtmlTag(block)
 	case '&':

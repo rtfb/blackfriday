@@ -5,10 +5,10 @@ import (
 )
 
 type Parser struct {
-	doc    *Node
-	tip    *Node // = doc
-	oldTip *Node
-	//refmap
+	doc                  *Node
+	tip                  *Node // = doc
+	oldTip               *Node
+	refmap               RefMap
 	lineNumber           uint32
 	lastLineLength       uint32
 	offset               uint32
@@ -24,6 +24,13 @@ type Parser struct {
 	allClosed            bool
 	inlineParser         *InlineParser
 }
+
+type Ref struct {
+	Dest  []byte
+	Title []byte
+}
+
+type RefMap map[string]*Ref
 
 func NewParser() *Parser {
 	docNode := NewNode(Document)
@@ -150,6 +157,8 @@ func (p *Parser) finalize(block *Node, lineNumber uint32) {
 }
 
 func (p *Parser) processInlines(ast *Node) {
+	p.inlineParser.refmap = p.refmap
+	//p.inlineParser.options = p.options
 	/*
 		walker := NewNodeWalker(ast)
 		for node := ast; node != nil; node, _ = walker.next() {

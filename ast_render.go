@@ -20,8 +20,13 @@ func tag(name string, attrs []string, selfClosing bool) []byte {
 func render(ast *Node) []byte {
 	var buff bytes.Buffer
 	var lastOutput []byte
+	disableTags := 0
 	out := func(text []byte) {
-		buff.Write(text)
+		if disableTags > 0 {
+			buff.Write(reHtmlTag.ReplaceAll(text, []byte{}))
+		} else {
+			buff.Write(text)
+		}
 		lastOutput = text
 	}
 	// XXX: this out("\n") is only for compatibility with existing Blackfriday
@@ -83,6 +88,26 @@ func render(ast *Node) []byte {
 				out(tag("a", attrs, false))
 			} else {
 				out(tag("/a", nil, false))
+			}
+		case Image:
+			if entering {
+				if disableTags == 0 {
+					//if options.safe && potentiallyUnsafe(node.destination) {
+					//out(`<img src="" alt="`)
+					//} else {
+					out([]byte(fmt.Sprintf(`<img src="%s" alt="`, esc(node.destination, true))))
+					//}
+				}
+				disableTags++
+			} else {
+				disableTags--
+				if disableTags == 0 {
+					if node.title != nil {
+						out([]byte(`" title="`))
+						out(esc(node.title, true))
+					}
+					out([]byte(`" />`))
+				}
 			}
 		case Code:
 			out(tag("code", nil, false))
