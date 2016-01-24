@@ -205,7 +205,11 @@ func (p *InlineParser) parseString(block *Node) bool {
 		return false
 	}
 	p.pos += len(match)
+	// if p.options.smart {
+	// TODO
+	// } else {
 	block.appendChild(text(match))
+	// }
 	return true
 }
 
@@ -647,6 +651,11 @@ func (p *InlineParser) parseInline(block *Node) bool {
 	case '*', '_':
 		res = p.handleDelim(ch, block)
 		break
+		// TODO:
+		//case '\'', '"':
+		//	//if p.options.smart {
+		//	res = p.handleDelim(ch, block)
+		//	//}
 	case '[':
 		res = p.parseOpenBracket(block)
 	case '!':
