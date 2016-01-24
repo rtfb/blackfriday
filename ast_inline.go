@@ -120,19 +120,17 @@ func (p *InlineParser) scanDelims(ch byte) (numDelims int, canOpen, canClose boo
 	if startPos > 0 {
 		charBefore = p.subject[startPos-1]
 	}
-	charAfter := p.peek()
-	//cc_after = this.peek();
-	//if (cc_after === -1) {
-	//    char_after = '\n';
-	//} else {
-	//    char_after = fromCodePoint(cc_after);
-	//}
+	charAfter := byte('\n')
+	tmpChar := p.peek()
+	if tmpChar != 255 {
+		charAfter = tmpChar
+	}
 	afterIsWhitespace := reWhitespaceChar.Match([]byte{charAfter})
 	afterIsPunctuation := rePunctuation.Match([]byte{charAfter})
 	beforeIsWhitespace := reWhitespaceChar.Match([]byte{charBefore})
 	beforeIsPunctuation := rePunctuation.Match([]byte{charBefore})
 	leftFlanking := !afterIsWhitespace && !(afterIsPunctuation && !beforeIsWhitespace && !beforeIsPunctuation)
-	rightFlanking := !beforeIsWhitespace && !(beforeIsPunctuation && !afterIsPunctuation && !afterIsPunctuation)
+	rightFlanking := !beforeIsWhitespace && !(beforeIsPunctuation && !afterIsWhitespace && !afterIsPunctuation)
 	if ch == '_' {
 		canOpen = leftFlanking && (!rightFlanking || beforeIsPunctuation)
 		canClose = rightFlanking && (!leftFlanking || afterIsPunctuation)

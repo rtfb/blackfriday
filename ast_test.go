@@ -65,6 +65,18 @@ func TestAST2(t *testing.T) {
 		"**foo**",
 		"<p><strong>foo</strong></p>\n",
 
+		"**foo\nbar**",
+		"<p><strong>foo\nbar</strong></p>\n",
+
+		"**What is an algorithm?**\n",
+		"<p><strong>What is an algorithm?</strong></p>\n",
+
+		"**foo [bar](/url)**",
+		"<p><strong>foo <a href=\"/url\">bar</a></strong></p>\n",
+
+		"*What is A\\* algorithm?*\n",
+		"<p><em>What is A* algorithm?</em></p>\n",
+
 		"## *Emphasised* header\n> quote",
 		"<h2><em>Emphasised</em> header</h2>\n\n<blockquote>\n<p>quote</p>\n</blockquote>\n",
 
