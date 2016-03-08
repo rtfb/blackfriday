@@ -158,7 +158,7 @@ func TestAST2(t *testing.T) {
 		//ast := NewParser().parse([]byte(input))
 		renderer := HtmlRenderer(UseXHTML, "", "")
 		Markdown([]byte(input), renderer, NoExtensions)
-		actual := string(render(renderer.GetAST()))
+		actual := string(render_CommonMark(renderer.GetAST()))
 		if actual != expected {
 			t.Errorf("\nInput   [%#v]\nExpected[%#v]\nActual  [%#v]",
 				candidate, expected, actual)

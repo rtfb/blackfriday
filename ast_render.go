@@ -17,7 +17,9 @@ func tag(name string, attrs []string, selfClosing bool) []byte {
 	return []byte(result + ">")
 }
 
-func render(ast *Node) []byte {
+func render_CommonMark(ast *Node) []byte {
+	//println("render_CommonMark")
+	//dump(ast)
 	var buff bytes.Buffer
 	var lastOutput []byte
 	disableTags := 0
@@ -28,12 +30,6 @@ func render(ast *Node) []byte {
 			buff.Write(text)
 		}
 		lastOutput = text
-	}
-	// XXX: this out("\n") is only for compatibility with existing Blackfriday
-	// tests. Not necessary otherwise and should probably be eliminated when
-	// the time comes
-	compatibilityNewline := func() {
-		out([]byte("\n"))
 	}
 	esc := func(text []byte, preserveEntities bool) []byte {
 		// XXX: impl
@@ -136,7 +132,6 @@ func render(ast *Node) []byte {
 		case BlockQuote:
 			if entering {
 				cr()
-				compatibilityNewline()
 				out(tag("blockquote", attrs, false))
 				cr()
 			} else {
@@ -146,7 +141,6 @@ func render(ast *Node) []byte {
 			}
 			break
 		case HtmlBlock:
-			compatibilityNewline()
 			out(node.literal)
 			cr()
 		case Header:
@@ -161,7 +155,6 @@ func render(ast *Node) []byte {
 			break
 		case HorizontalRule:
 			cr()
-			compatibilityNewline()
 			out(tag("hr", attrs, true))
 			cr()
 			break
