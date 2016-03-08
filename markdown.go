@@ -234,7 +234,8 @@ type parser struct {
 	// presence. If a ref is also a footnote, it's stored both in refs and here
 	// in notes. Slice is nil if footnotes not enabled.
 	notes []*reference
-	ast   *Node
+	//ast       *Node
+	p *Parser
 }
 
 func (p *parser) getRef(refid string) (ref *reference, found bool) {
@@ -367,6 +368,7 @@ func MarkdownOptions(input []byte, renderer Renderer, opts Options) []byte {
 	// fill in the render structure
 	p := new(parser)
 	p.r = renderer
+	p.p = NewParser()
 	p.flags = extensions
 	p.refOverride = opts.ReferenceOverride
 	p.refs = make(map[string]*reference)
@@ -401,10 +403,15 @@ func MarkdownOptions(input []byte, renderer Renderer, opts Options) []byte {
 		p.notes = make([]*reference, 0)
 	}
 
-	first := firstPass(p, input)
-	renderer.SetAST(p.ast)
-	second := secondPass(p, first)
-	return second
+	numLines, first := firstPass(p, input)
+	secondPass(p, first)
+	// walk the tree and finish up some of unfinished blocks:
+	for p.p.tip != nil {
+		p.p.finalize(p.p.tip, numLines)
+	}
+	renderer.SetAST(p.p.doc)
+	//render_CommonMark(p.ast)
+	return renderer.Render(p.p.doc)
 }
 
 // first pass:
@@ -412,7 +419,8 @@ func MarkdownOptions(input []byte, renderer Renderer, opts Options) []byte {
 // - expand tabs
 // - normalize newlines
 // - copy everything else
-func firstPass(p *parser, input []byte) []byte {
+//func firstPass(p *parser, input []byte) []byte {
+func firstPass(p *parser, input []byte) (uint32, []byte) {
 	var out bytes.Buffer
 	tabSize := TabSizeDefault
 	if p.flags&TabSizeEight != 0 {
@@ -420,7 +428,7 @@ func firstPass(p *parser, input []byte) []byte {
 	}
 	beg, end := 0, 0
 	lastFencedCodeBlockEnd := 0
-	astParser := NewParser()
+	//astParser := NewParser(p)
 	var numLines uint32
 	for beg < len(input) { // iterate over lines
 		if end = isReference(p, input[beg:], tabSize); end > 0 {
@@ -442,7 +450,7 @@ func firstPass(p *parser, input []byte) []byte {
 			}
 
 			// add the line body if present
-			astParser.incorporateLine(input[beg:end])
+			//astParser.incorporateLine(input[beg:end])
 			numLines++
 			if end > beg {
 				if end < lastFencedCodeBlockEnd { // Do not expand tabs while inside fenced code blocks.
@@ -469,13 +477,14 @@ func firstPass(p *parser, input []byte) []byte {
 		out.WriteByte('\n')
 	}
 
-	for astParser.tip != nil {
-		astParser.finalize(astParser.tip, numLines)
-	}
-	astParser.processInlines(astParser.doc)
-	p.ast = astParser.doc
+	//for astParser.tip != nil {
+	//astParser.finalize(astParser.tip, numLines)
+	//}
+	//astParser.processInlines(astParser.doc)
+	//p.ast = astParser.doc
 
-	return out.Bytes()
+	//return out.Bytes()
+	return numLines, out.Bytes()
 }
 
 // second pass: actual rendering

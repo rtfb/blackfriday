@@ -116,7 +116,7 @@ func (p *parser) block(data []byte) {
 		// or
 		// ______
 		if p.isHRule(data) {
-			p.r.HRule()
+			p.addBlock(HorizontalRule, nil)
 			var i int
 			for i = 0; data[i] != '\n'; i++ {
 			}
@@ -189,6 +189,13 @@ func (p *parser) block(data []byte) {
 	p.nesting--
 }
 
+func (p *parser) addBlock(typ NodeType, content []byte) *Node {
+	p.p.closeUnmatchedBlocks()
+	container := p.p.addChild(typ, 0)
+	container.content = content
+	return container
+}
+
 func (p *parser) isPrefixHeader(data []byte) bool {
 	if data[0] != '#' {
 		return false
@@ -245,11 +252,8 @@ func (p *parser) prefixHeader(data []byte) int {
 		if id == "" && p.flags&AutoHeaderIDs != 0 {
 			id = sanitized_anchor_name.Create(string(data[i:end]))
 		}
-		p.r.BeginHeader(level, id)
-		header := p.r.CopyWrites(func() {
-			p.inline(data[i:end])
-		})
-		p.r.EndHeader(level, id, header)
+		block := p.addBlock(Header, data[i:end])
+		block.level = uint32(level)
 	}
 	return skip
 }
@@ -391,7 +395,7 @@ func (p *parser) html(data []byte, doRender bool) int {
 		for end > 0 && data[end-1] == '\n' {
 			end--
 		}
-		p.r.BlockHtml(data[:end])
+		p.addBlock(HtmlBlock, data[:end])
 	}
 
 	return i
@@ -409,7 +413,8 @@ func (p *parser) htmlComment(data []byte, doRender bool) int {
 			for end > 0 && data[end-1] == '\n' {
 				end--
 			}
-			p.r.BlockHtml(data[:end])
+			block := p.addBlock(HtmlBlock, data[:end])
+			block.htmlBlockType = 2
 		}
 		return size
 	}
@@ -441,7 +446,7 @@ func (p *parser) htmlHr(data []byte, doRender bool) int {
 				for end > 0 && data[end-1] == '\n' {
 					end--
 				}
-				p.r.BlockHtml(data[:end])
+				p.addBlock(HtmlBlock, data[:end])
 			}
 			return size
 		}
@@ -464,7 +469,9 @@ func (p *parser) htmlFindTag(data []byte) (string, bool) {
 
 func (p *parser) htmlFindEnd(tag string, data []byte) int {
 	// assume data[0] == '<' && data[1] == '/' already tested
-
+	if tag == "hr" {
+		return 2
+	}
 	// check if tag is a match
 	closetag := []byte("</" + tag + ">")
 	if !bytes.HasPrefix(data, closetag) {
@@ -642,6 +649,10 @@ func (p *parser) fencedCode(data []byte, doRender bool) int {
 	}
 
 	var work bytes.Buffer
+	if lang != nil {
+		work.Write([]byte(*lang))
+		work.WriteByte('\n')
+	}
 
 	for {
 		// safe to assume beg < len(data)
@@ -668,13 +679,15 @@ func (p *parser) fencedCode(data []byte, doRender bool) int {
 		beg = end
 	}
 
-	syntax := ""
-	if lang != nil {
-		syntax = *lang
-	}
+	//syntax := ""
+	//if lang != nil {
+	//	syntax = *lang
+	//}
 
 	if doRender {
-		p.r.BlockCode(work.Bytes(), syntax)
+		block := p.addBlock(CodeBlock, work.Bytes()) // TODO: get rid of temp buffer
+		block.isFenced = true
+		p.p.finalize(block, 0)
 	}
 
 	return beg
@@ -910,6 +923,7 @@ func (p *parser) terminateBlockquote(data []byte, beg, end int) bool {
 
 // parse a blockquote fragment
 func (p *parser) quote(data []byte) int {
+	block := p.addBlock(BlockQuote, nil)
 	var raw bytes.Buffer
 	beg, end := 0, 0
 	for beg < len(data) {
@@ -928,22 +942,18 @@ func (p *parser) quote(data []byte) int {
 			end++
 		}
 		end++
-
 		if pre := p.quotePrefix(data[beg:]); pre > 0 {
 			// skip the prefix
 			beg += pre
 		} else if p.terminateBlockquote(data, beg, end) {
 			break
 		}
-
 		// this line is part of the blockquote
 		raw.Write(data[beg:end])
 		beg = end
 	}
-
-	p.r.BlockQuote(p.r.CaptureWrites(func() {
-		p.block(raw.Bytes())
-	}))
+	p.block(raw.Bytes())
+	p.p.finalize(block, 0)
 	return end
 }
 
@@ -995,7 +1005,9 @@ func (p *parser) code(data []byte) int {
 
 	work.WriteByte('\n')
 
-	p.r.BlockCode(work.Bytes(), "")
+	block := p.addBlock(CodeBlock, work.Bytes()) // TODO: get rid of temp buffer
+	block.isFenced = false
+	p.p.finalize(block, 0)
 
 	return i
 }
@@ -1053,14 +1065,33 @@ func (p *parser) dliPrefix(data []byte) int {
 	return i + 2
 }
 
+func convertListType(flags ListType) ASTListType {
+	if flags&ListTypeOrdered != 0 {
+		return OrderedList
+	}
+	return BulletList
+}
+
 // parse ordered or unordered list block
 func (p *parser) list(data []byte, flags ListType) int {
 	i := 0
 	flags |= ListItemBeginningOfList
-	p.r.BeginList(flags)
+	block := p.addBlock(List, nil)
+	block.listData = &ListData{ // TODO: fill in the real ListData
+		Type:         convertListType(flags),
+		tight:        true,
+		bulletChar:   '*',
+		start:        0,
+		delimiter:    0,
+		padding:      0,
+		markerOffset: 0,
+	}
 
 	for i < len(data) {
 		skip := p.listItem(data[i:], &flags)
+		if flags&ListItemContainsBlock != 0 {
+			block.listData.tight = false
+		}
 		i += skip
 		if skip == 0 || flags&ListItemEndOfList != 0 {
 			break
@@ -1068,7 +1099,7 @@ func (p *parser) list(data []byte, flags ListType) int {
 		flags &= ^ListItemBeginningOfList
 	}
 
-	p.r.EndList(flags)
+	p.p.finalize(block, 0)
 	return i
 }
 
@@ -1223,44 +1254,37 @@ gatherlines:
 
 	rawBytes := raw.Bytes()
 
+	block := p.addBlock(Item, nil)
+	block.listData = &ListData{ // TODO: fill in the real ListData
+		Type:         convertListType(*flags),
+		tight:        false,
+		bulletChar:   '*',
+		start:        0,
+		delimiter:    0,
+		padding:      0,
+		markerOffset: 0,
+	}
+
 	// render the contents of the list item
-	var cooked bytes.Buffer
 	if *flags&ListItemContainsBlock != 0 && *flags&ListTypeTerm == 0 {
 		// intermediate render of block item, except for definition term
 		if sublist > 0 {
-			cooked.Write(p.r.CaptureWrites(func() {
-				p.block(rawBytes[:sublist])
-				p.block(rawBytes[sublist:])
-			}))
+			p.block(rawBytes[:sublist])
+			p.block(rawBytes[sublist:])
 		} else {
-			cooked.Write(p.r.CaptureWrites(func() {
-				p.block(rawBytes)
-			}))
+			p.block(rawBytes)
 		}
 	} else {
 		// intermediate render of inline item
 		if sublist > 0 {
-			cooked.Write(p.r.CaptureWrites(func() {
-				p.inline(rawBytes[:sublist])
-				p.block(rawBytes[sublist:])
-			}))
+			child := p.p.addChild(Paragraph, 0)
+			child.content = rawBytes[:sublist]
+			p.block(rawBytes[sublist:])
 		} else {
-			cooked.Write(p.r.CaptureWrites(func() {
-				p.inline(rawBytes)
-			}))
+			child := p.p.addChild(Paragraph, 0)
+			child.content = rawBytes
 		}
 	}
-
-	// render the actual list item
-	cookedBytes := cooked.Bytes()
-	parsedEnd := len(cookedBytes)
-
-	// strip trailing newlines
-	for parsedEnd > 0 && cookedBytes[parsedEnd-1] == '\n' {
-		parsedEnd--
-	}
-	p.r.ListItem(cookedBytes[:parsedEnd], *flags)
-
 	return line
 }
 
@@ -1284,9 +1308,7 @@ func (p *parser) renderParagraph(data []byte) {
 		end--
 	}
 
-	p.r.BeginParagraph()
-	p.inline(data[beg:end])
-	p.r.EndParagraph()
+	p.addBlock(Paragraph, data[beg:end])
 }
 
 func (p *parser) paragraph(data []byte) int {
@@ -1330,16 +1352,14 @@ func (p *parser) paragraph(data []byte) int {
 					eol--
 				}
 
-				id := ""
-				if p.flags&AutoHeaderIDs != 0 {
-					id = sanitized_anchor_name.Create(string(data[prev:eol]))
-				}
+				// TODO: reintroduce AutoHeaderIDs
+				//id := ""
+				//if p.flags&AutoHeaderIDs != 0 {
+				//	id = sanitized_anchor_name.Create(string(data[prev:eol]))
+				//}
 
-				p.r.BeginHeader(level, id)
-				header := p.r.CopyWrites(func() {
-					p.inline(data[prev:eol])
-				})
-				p.r.EndHeader(level, id, header)
+				block := p.addBlock(Header, data[prev:eol])
+				block.level = uint32(level)
 
 				// find the end of the underline
 				for data[i] != '\n' {
