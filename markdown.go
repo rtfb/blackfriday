@@ -235,7 +235,8 @@ type parser struct {
 	// in notes. Slice is nil if footnotes not enabled.
 	notes []*reference
 	//ast       *Node
-	p *Parser
+	p         *Parser
+	currBlock *Node // a block node currently being parsed by inline parser
 }
 
 func (p *parser) getRef(refid string) (ref *reference, found bool) {
@@ -409,6 +410,13 @@ func MarkdownOptions(input []byte, renderer Renderer, opts Options) []byte {
 	for p.p.tip != nil {
 		p.p.finalize(p.p.tip, numLines)
 	}
+	forEachNode(p.p.doc, func(node *Node, entering bool) {
+		if node.Type == Paragraph || node.Type == Header {
+			p.currBlock = node
+			p.inline(node.content)
+			node.content = nil
+		}
+	})
 	renderer.SetAST(p.p.doc)
 	//render_CommonMark(p.ast)
 	return renderer.Render(p.p.doc)

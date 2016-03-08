@@ -17,6 +17,7 @@ const (
 	HorizontalRule
 	Emph
 	Strong
+	Del
 	Link
 	Image
 	Text
@@ -38,6 +39,7 @@ var nodeTypeNames = []string{
 	HorizontalRule: "HorizontalRule",
 	Emph:           "Emph",
 	Strong:         "Strong",
+	Del:            "Del",
 	Link:           "Link",
 	Image:          "Image",
 	Text:           "Text",
@@ -154,6 +156,8 @@ func (n *Node) isContainer() bool {
 	case Emph:
 		fallthrough
 	case Strong:
+		fallthrough
+	case Del:
 		fallthrough
 	case Link:
 		fallthrough
