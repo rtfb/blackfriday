@@ -97,7 +97,8 @@ var (
 	// XXX: The above regexp has a negative lookahead bit (the one that goes
 	// (?!...)) and Go doesn't support negative lookahead. Need to figure out a
 	// way to work around that, but for now I'm using a simplified regexp below
-	reCodeFence = regexp.MustCompile("^`{3,}|^~{3,}")
+	reCodeFence          = regexp.MustCompile("^`{3,}|^~{3,}")
+	reTrailingWhitespace = regexp.MustCompile("(\n *)+$")
 )
 
 type BlockHandler interface {
@@ -236,8 +237,7 @@ func (h *HtmlBlockHandler) Continue(p *Parser, container *Node) ContinueStatus {
 }
 
 func (h *HtmlBlockHandler) Finalize(p *Parser, block *Node) {
-	reNewlines := regexp.MustCompile("(\n *)+$")
-	block.literal = reNewlines.ReplaceAll(block.content, []byte{})
+	block.literal = reTrailingWhitespace.ReplaceAll(block.content, []byte{})
 	block.content = []byte{}
 }
 
@@ -369,7 +369,6 @@ func (h *CodeBlockHandler) Finalize(p *Parser, block *Node) {
 		block.info = unescapeString(bytes.Trim(firstLine, "\n"))
 		block.literal = rest
 	} else {
-		reTrailingWhitespace := regexp.MustCompile("(\n *)+$")
 		block.literal = reTrailingWhitespace.ReplaceAll(block.content, []byte{'\n'})
 	}
 	block.content = nil
