@@ -270,7 +270,6 @@ func (p *parser) getRef(refid string) (ref *reference, found bool) {
 func (p *parser) finalize(block *Node, lineNumber uint32) {
 	above := block.parent
 	block.open = false
-	blockHandlers[block.Type].Finalize(block)
 	p.tip = above
 }
 

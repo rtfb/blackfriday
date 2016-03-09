@@ -15,8 +15,21 @@ package blackfriday
 
 import (
 	"bytes"
+	"html"
+	"regexp"
 
 	"github.com/shurcooL/sanitized_anchor_name"
+)
+
+const (
+	Entity    = "&(?:#x[a-f0-9]{1,8}|#[0-9]{1,8}|[a-z][a-z0-9]{1,31});"
+	Escapable = "[!\"#$%&'()*+,./:;<=>?@[\\\\\\]^_`{|}~-]"
+)
+
+var (
+	reBackslashOrAmp      = regexp.MustCompile("[\\&]")
+	reEntityOrEscapedChar = regexp.MustCompile("(?i)\\\\" + Escapable + "|" + Entity)
+	reTrailingWhitespace  = regexp.MustCompile("(\n *)+$")
 )
 
 // Parse block-level data.
@@ -395,10 +408,15 @@ func (p *parser) html(data []byte, doRender bool) int {
 		for end > 0 && data[end-1] == '\n' {
 			end--
 		}
-		p.addBlock(HtmlBlock, data[:end])
+		finalizeHtmlBlock(p.addBlock(HtmlBlock, data[:end]))
 	}
 
 	return i
+}
+
+func finalizeHtmlBlock(block *Node) {
+	block.literal = reTrailingWhitespace.ReplaceAll(block.content, []byte{})
+	block.content = []byte{}
 }
 
 // HTML comment, lax form
@@ -415,6 +433,7 @@ func (p *parser) htmlComment(data []byte, doRender bool) int {
 			}
 			block := p.addBlock(HtmlBlock, data[:end])
 			block.htmlBlockType = 2
+			finalizeHtmlBlock(block)
 		}
 		return size
 	}
@@ -446,7 +465,7 @@ func (p *parser) htmlHr(data []byte, doRender bool) int {
 				for end > 0 && data[end-1] == '\n' {
 					end--
 				}
-				p.addBlock(HtmlBlock, data[:end])
+				finalizeHtmlBlock(p.addBlock(HtmlBlock, data[:end]))
 			}
 			return size
 		}
@@ -687,10 +706,38 @@ func (p *parser) fencedCode(data []byte, doRender bool) int {
 	if doRender {
 		block := p.addBlock(CodeBlock, work.Bytes()) // TODO: get rid of temp buffer
 		block.isFenced = true
-		p.finalize(block, 0)
+		finalizeCodeBlock(block)
 	}
 
 	return beg
+}
+
+func unescapeChar(str []byte) []byte {
+	if str[0] == '\\' {
+		return []byte{str[1]}
+	}
+	return []byte(html.UnescapeString(string(str)))
+}
+
+func unescapeString(str []byte) []byte {
+	if reBackslashOrAmp.Match(str) {
+		return reEntityOrEscapedChar.ReplaceAllFunc(str, unescapeChar)
+	} else {
+		return str
+	}
+}
+
+func finalizeCodeBlock(block *Node) {
+	if block.isFenced {
+		newlinePos := bytes.IndexByte(block.content, '\n')
+		firstLine := block.content[:newlinePos]
+		rest := block.content[newlinePos+1:]
+		block.info = unescapeString(bytes.Trim(firstLine, "\n"))
+		block.literal = rest
+	} else {
+		block.literal = reTrailingWhitespace.ReplaceAll(block.content, []byte{'\n'})
+	}
+	block.content = nil
 }
 
 func (p *parser) table(data []byte) int {
@@ -1007,7 +1054,7 @@ func (p *parser) code(data []byte) int {
 
 	block := p.addBlock(CodeBlock, work.Bytes()) // TODO: get rid of temp buffer
 	block.isFenced = false
-	p.finalize(block, 0)
+	finalizeCodeBlock(block)
 
 	return i
 }
@@ -1099,8 +1146,50 @@ func (p *parser) list(data []byte, flags ListType) int {
 		flags &= ^ListItemBeginningOfList
 	}
 
-	p.finalize(block, 0)
+	above := block.parent
+	finalizeList(block)
+	p.tip = above
 	return i
+}
+
+// Returns true if block ends with a blank line, descending if needed
+// into lists and sublists.
+func endsWithBlankLine(block *Node) bool {
+	for block != nil {
+		if block.lastLineBlank {
+			return true
+		}
+		t := block.Type
+		if t == List || t == Item {
+			block = block.lastChild
+		} else {
+			break
+		}
+	}
+	return false
+}
+
+func finalizeList(block *Node) {
+	block.open = false
+	item := block.firstChild
+	for item != nil {
+		// check for non-final list item ending with blank line:
+		if endsWithBlankLine(item) && item.next != nil {
+			block.listData.tight = false
+			break
+		}
+		// recurse into children of list item, to see if there are spaces
+		// between any of them:
+		subItem := item.firstChild
+		for subItem != nil {
+			if endsWithBlankLine(subItem) && (item.next != nil || subItem.next != nil) {
+				block.listData.tight = false
+				break
+			}
+			subItem = subItem.next
+		}
+		item = item.next
+	}
 }
 
 // Parse a single list item.
