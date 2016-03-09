@@ -169,6 +169,16 @@ func (n *Node) isContainer() bool {
 	return false
 }
 
+func (n *Node) canContain(t NodeType) bool {
+	if n.Type == List {
+		return t == Item
+	}
+	if n.Type == Document || n.Type == BlockQuote || n.Type == Item {
+		return t != Item
+	}
+	return false
+}
+
 type NodeWalker struct {
 	current  *Node
 	root     *Node

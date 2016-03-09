@@ -274,7 +274,7 @@ func (p *parser) finalize(block *Node, lineNumber uint32) {
 }
 
 func (p *parser) addChild(node NodeType, offset uint32) *Node {
-	for !blockHandlers[p.tip.Type].CanContain(node) {
+	for !p.tip.canContain(node) {
 		p.finalize(p.tip, p.lineNumber-1)
 	}
 	newNode := NewNode(node)
