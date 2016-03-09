@@ -235,8 +235,16 @@ type parser struct {
 	// in notes. Slice is nil if footnotes not enabled.
 	notes []*reference
 	//ast       *Node
-	p         *Parser
 	currBlock *Node // a block node currently being parsed by inline parser
+
+	doc                  *Node
+	tip                  *Node // = doc
+	oldTip               *Node
+	lineNumber           uint32
+	offset               uint32
+	column               uint32
+	lastMatchedContainer *Node // = doc
+	allClosed            bool
 }
 
 func (p *parser) getRef(refid string) (ref *reference, found bool) {
@@ -257,6 +265,35 @@ func (p *parser) getRef(refid string) (ref *reference, found bool) {
 	// refs are case insensitive
 	ref, found = p.refs[strings.ToLower(refid)]
 	return ref, found
+}
+
+func (p *parser) finalize(block *Node, lineNumber uint32) {
+	above := block.parent
+	block.open = false
+	blockHandlers[block.Type].Finalize(block)
+	p.tip = above
+}
+
+func (p *parser) addChild(node NodeType, offset uint32) *Node {
+	for !blockHandlers[p.tip.Type].CanContain(node) {
+		p.finalize(p.tip, p.lineNumber-1)
+	}
+	newNode := NewNode(node)
+	newNode.content = []byte{}
+	p.tip.appendChild(newNode)
+	p.tip = newNode
+	return newNode
+}
+
+func (p *parser) closeUnmatchedBlocks() {
+	if !p.allClosed {
+		for p.oldTip != p.lastMatchedContainer {
+			parent := p.oldTip.parent
+			p.finalize(p.oldTip, p.lineNumber-1)
+			p.oldTip = parent
+		}
+		p.allClosed = true
+	}
 }
 
 //
@@ -369,12 +406,21 @@ func MarkdownOptions(input []byte, renderer Renderer, opts Options) []byte {
 	// fill in the render structure
 	p := new(parser)
 	p.r = renderer
-	p.p = NewParser()
 	p.flags = extensions
 	p.refOverride = opts.ReferenceOverride
 	p.refs = make(map[string]*reference)
 	p.maxNesting = 16
 	p.insideLink = false
+
+	docNode := NewNode(Document)
+	p.doc = docNode
+	p.tip = docNode
+	p.oldTip = docNode
+	p.lineNumber = 0
+	p.offset = 0
+	p.column = 0
+	p.lastMatchedContainer = docNode
+	p.allClosed = true
 
 	// register inline parsers
 	p.inlineCallback['*'] = emphasis
@@ -407,19 +453,19 @@ func MarkdownOptions(input []byte, renderer Renderer, opts Options) []byte {
 	numLines, first := firstPass(p, input)
 	secondPass(p, first)
 	// walk the tree and finish up some of unfinished blocks:
-	for p.p.tip != nil {
-		p.p.finalize(p.p.tip, numLines)
+	for p.tip != nil {
+		p.finalize(p.tip, numLines)
 	}
-	forEachNode(p.p.doc, func(node *Node, entering bool) {
+	forEachNode(p.doc, func(node *Node, entering bool) {
 		if node.Type == Paragraph || node.Type == Header {
 			p.currBlock = node
 			p.inline(node.content)
 			node.content = nil
 		}
 	})
-	renderer.SetAST(p.p.doc)
+	renderer.SetAST(p.doc)
 	//render_CommonMark(p.ast)
-	return renderer.Render(p.p.doc)
+	return renderer.Render(p.doc)
 }
 
 // first pass:

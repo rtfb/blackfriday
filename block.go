@@ -190,8 +190,8 @@ func (p *parser) block(data []byte) {
 }
 
 func (p *parser) addBlock(typ NodeType, content []byte) *Node {
-	p.p.closeUnmatchedBlocks()
-	container := p.p.addChild(typ, 0)
+	p.closeUnmatchedBlocks()
+	container := p.addChild(typ, 0)
 	container.content = content
 	return container
 }
@@ -687,7 +687,7 @@ func (p *parser) fencedCode(data []byte, doRender bool) int {
 	if doRender {
 		block := p.addBlock(CodeBlock, work.Bytes()) // TODO: get rid of temp buffer
 		block.isFenced = true
-		p.p.finalize(block, 0)
+		p.finalize(block, 0)
 	}
 
 	return beg
@@ -953,7 +953,7 @@ func (p *parser) quote(data []byte) int {
 		beg = end
 	}
 	p.block(raw.Bytes())
-	p.p.finalize(block, 0)
+	p.finalize(block, 0)
 	return end
 }
 
@@ -1007,7 +1007,7 @@ func (p *parser) code(data []byte) int {
 
 	block := p.addBlock(CodeBlock, work.Bytes()) // TODO: get rid of temp buffer
 	block.isFenced = false
-	p.p.finalize(block, 0)
+	p.finalize(block, 0)
 
 	return i
 }
@@ -1099,7 +1099,7 @@ func (p *parser) list(data []byte, flags ListType) int {
 		flags &= ^ListItemBeginningOfList
 	}
 
-	p.p.finalize(block, 0)
+	p.finalize(block, 0)
 	return i
 }
 
@@ -1277,11 +1277,11 @@ gatherlines:
 	} else {
 		// intermediate render of inline item
 		if sublist > 0 {
-			child := p.p.addChild(Paragraph, 0)
+			child := p.addChild(Paragraph, 0)
 			child.content = rawBytes[:sublist]
 			p.block(rawBytes[sublist:])
 		} else {
-			child := p.p.addChild(Paragraph, 0)
+			child := p.addChild(Paragraph, 0)
 			child.content = rawBytes
 		}
 	}

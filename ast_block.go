@@ -30,14 +30,14 @@ var (
 )
 
 type BlockHandler interface {
-	Finalize(p *Parser, block *Node)
+	Finalize(block *Node)
 	CanContain(t NodeType) bool
 }
 
 type HeaderBlockHandler struct {
 }
 
-func (h *HeaderBlockHandler) Finalize(p *Parser, block *Node) {
+func (h *HeaderBlockHandler) Finalize(block *Node) {
 }
 
 func (h *HeaderBlockHandler) CanContain(t NodeType) bool {
@@ -47,7 +47,7 @@ func (h *HeaderBlockHandler) CanContain(t NodeType) bool {
 type DocumentBlockHandler struct {
 }
 
-func (h *DocumentBlockHandler) Finalize(p *Parser, block *Node) {
+func (h *DocumentBlockHandler) Finalize(block *Node) {
 }
 
 func (h *DocumentBlockHandler) CanContain(t NodeType) bool {
@@ -57,7 +57,7 @@ func (h *DocumentBlockHandler) CanContain(t NodeType) bool {
 type HorizontalRuleBlockHandler struct {
 }
 
-func (h *HorizontalRuleBlockHandler) Finalize(p *Parser, block *Node) {
+func (h *HorizontalRuleBlockHandler) Finalize(block *Node) {
 }
 
 func (h *HorizontalRuleBlockHandler) CanContain(t NodeType) bool {
@@ -67,7 +67,7 @@ func (h *HorizontalRuleBlockHandler) CanContain(t NodeType) bool {
 type BlockQuoteBlockHandler struct {
 }
 
-func (h *BlockQuoteBlockHandler) Finalize(p *Parser, block *Node) {
+func (h *BlockQuoteBlockHandler) Finalize(block *Node) {
 }
 
 func (h *BlockQuoteBlockHandler) CanContain(t NodeType) bool {
@@ -77,7 +77,7 @@ func (h *BlockQuoteBlockHandler) CanContain(t NodeType) bool {
 type ParagraphBlockHandler struct {
 }
 
-func (h *ParagraphBlockHandler) Finalize(p *Parser, block *Node) {
+func (h *ParagraphBlockHandler) Finalize(block *Node) {
 	/*
 		TODO:
 			hasReferenceDefs := false
@@ -99,7 +99,7 @@ func (h *ParagraphBlockHandler) CanContain(t NodeType) bool {
 type HtmlBlockHandler struct {
 }
 
-func (h *HtmlBlockHandler) Finalize(p *Parser, block *Node) {
+func (h *HtmlBlockHandler) Finalize(block *Node) {
 	block.literal = reTrailingWhitespace.ReplaceAll(block.content, []byte{})
 	block.content = []byte{}
 }
@@ -111,7 +111,7 @@ func (h *HtmlBlockHandler) CanContain(t NodeType) bool {
 type ListBlockHandler struct {
 }
 
-func (h *ListBlockHandler) Finalize(p *Parser, block *Node) {
+func (h *ListBlockHandler) Finalize(block *Node) {
 	item := block.firstChild
 	for item != nil {
 		// check for non-final list item ending with blank line:
@@ -140,7 +140,7 @@ func (h *ListBlockHandler) CanContain(t NodeType) bool {
 type ItemBlockHandler struct {
 }
 
-func (h *ItemBlockHandler) Finalize(p *Parser, block *Node) {
+func (h *ItemBlockHandler) Finalize(block *Node) {
 }
 
 func (h *ItemBlockHandler) CanContain(t NodeType) bool {
@@ -165,7 +165,7 @@ func unescapeString(str []byte) []byte {
 	}
 }
 
-func (h *CodeBlockHandler) Finalize(p *Parser, block *Node) {
+func (h *CodeBlockHandler) Finalize(block *Node) {
 	if block.isFenced {
 		newlinePos := bytes.IndexByte(block.content, '\n')
 		firstLine := block.content[:newlinePos]
