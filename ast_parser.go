@@ -22,7 +22,7 @@ type Parser struct {
 	indented             bool
 	blank                bool
 	allClosed            bool
-	inlineParser         *InlineParser
+	//inlineParser         *InlineParser
 }
 
 type Ref struct {
@@ -46,7 +46,7 @@ func NewParser() *Parser {
 		currentLine:          []byte{},
 		lines:                nil,
 		allClosed:            true,
-		inlineParser:         NewInlineParser(),
+		//inlineParser:         NewInlineParser(),
 	}
 }
 
@@ -157,7 +157,7 @@ func (p *Parser) finalize(block *Node, lineNumber uint32) {
 }
 
 func (p *Parser) processInlines(ast *Node) {
-	p.inlineParser.refmap = p.refmap
+	//p.inlineParser.refmap = p.refmap
 	//p.inlineParser.options = p.options
 	/*
 		walker := NewNodeWalker(ast)
@@ -170,7 +170,7 @@ func (p *Parser) processInlines(ast *Node) {
 	*/
 	forEachNode(ast, func(node *Node, entering bool) {
 		if node.Type == Paragraph || node.Type == Header {
-			p.inlineParser.parse(node)
+			//p.inlineParser.parse(node)
 		}
 	})
 }
