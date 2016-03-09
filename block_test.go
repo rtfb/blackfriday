@@ -51,7 +51,6 @@ func doTestsBlockWithRunner(t *testing.T, tests []string, extensions Extensions,
 	if extensions&AutoHeaderIDs != 0 ||
 		extensions&HeaderIDs != 0 ||
 		extensions&Tables != 0 ||
-		extensions&NoEmptyLineBeforeBlock != 0 ||
 		extensions&Titleblock != 0 ||
 		extensions&DefinitionLists != 0 {
 		return
