@@ -254,6 +254,9 @@ func dumpString(ast *Node) string {
 */
 
 func dump_r(ast *Node, depth int) string {
+	if ast == nil {
+		return ""
+	}
 	indent := bytes.Repeat([]byte("\t"), depth)
 	content := ast.literal
 	if content == nil {
