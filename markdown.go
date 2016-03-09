@@ -210,6 +210,8 @@ type Renderer interface {
 
 	SetAST(ast *Node)
 	GetAST() *Node
+
+	Render(ast *Node) []byte
 }
 
 // Callback functions for inline parsing. One such function is defined

@@ -18,6 +18,7 @@ package blackfriday
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"regexp"
 	"strconv"
 	"strings"
@@ -46,6 +47,13 @@ const (
 	SmartypantsLatexDashes                        // Enable LaTeX-style dashes (with UseSmartypants)
 	SmartypantsAngledQuotes                       // Enable angled double quotes (with UseSmartypants) for double quotes rendering
 	FootnoteReturnLinks                           // Generate a link at the end of a footnote to return to the source
+
+	HTMLComment           = "<!---->|<!--(?:-?[^>-])(?:-?[^-])*-->"
+	ProcessingInstruction = "[<][?].*?[?][>]"
+	Declaration           = "<![A-Z]+" + "\\s+[^>]*>"
+	CDATA                 = "<!\\[CDATA\\[[\\s\\S]*?\\]\\]>"
+	HTMLTag               = "(?:" + OpenTag + "|" + CloseTag + "|" + HTMLComment + "|" +
+		ProcessingInstruction + "|" + Declaration + "|" + CDATA + ")"
 )
 
 var (
@@ -57,6 +65,7 @@ var (
 
 	// TODO: improve this regexp to catch all possible entities:
 	htmlEntity = regexp.MustCompile(`&[a-z]{2,5};`)
+	reHtmlTag  = regexp.MustCompile("(?i)^" + HTMLTag)
 )
 
 type HtmlRendererParameters struct {
@@ -248,20 +257,30 @@ func escapeSingleChar(char byte) (string, bool) {
 }
 
 func (r *Html) attrEscape(src []byte) {
-	org := 0
-	for i, ch := range src {
-		if entity, ok := escapeSingleChar(ch); ok {
-			if i > org {
-				// copy all the normal characters since the last escape
-				r.w.Write(src[org:i])
+	/*
+		org := 0
+		for i, ch := range src {
+			if entity, ok := escapeSingleChar(ch); ok {
+				if i > org {
+					// copy all the normal characters since the last escape
+					r.w.Write(src[org:i])
+				}
+				org = i + 1
+				r.w.WriteString(entity)
 			}
-			org = i + 1
-			r.w.WriteString(entity)
 		}
-	}
-	if org < len(src) {
-		r.w.Write(src[org:])
-	}
+		if org < len(src) {
+			r.w.Write(src[org:])
+		}
+	*/
+	r.w.Write(attrEscape2(src))
+}
+
+func attrEscape2(src []byte) []byte {
+	unesc := []byte(html.UnescapeString(string(src)))
+	esc1 := []byte(html.EscapeString(string(unesc)))
+	esc2 := bytes.Replace(esc1, []byte("&#34;"), []byte("&quot;"), -1)
+	return bytes.Replace(esc2, []byte("&#39;"), []byte{'\''}, -1)
 }
 
 func (r *Html) entityEscapeWithSkip(src []byte, skipRanges [][]int) {
@@ -735,6 +754,33 @@ func (r *Html) NormalText(text []byte) {
 	}
 }
 
+func (r *Html) Smartypants2(text []byte) []byte {
+	smrt := smartypantsData{false, false}
+	var buff bytes.Buffer
+	// first do normal entity escaping
+	text = attrEscape2(text)
+	mark := 0
+	for i := 0; i < len(text); i++ {
+		if action := r.smartypants[text[i]]; action != nil {
+			if i > mark {
+				buff.Write(text[mark:i])
+			}
+			previousChar := byte(0)
+			if i > 0 {
+				previousChar = text[i-1]
+			}
+			var tmp bytes.Buffer
+			i += action(&tmp, &smrt, previousChar, text[i:])
+			buff.Write(tmp.Bytes())
+			mark = i + 1
+		}
+	}
+	if mark < len(text) {
+		buff.Write(text[mark:])
+	}
+	return buff.Bytes()
+}
+
 func (r *Html) Smartypants(text []byte) {
 	smrt := smartypantsData{false, false}
 
@@ -1037,4 +1083,283 @@ func (r *Html) ensureUniqueHeaderID(id string) string {
 	}
 
 	return id
+}
+
+func (r *Html) addAbsPrefix(link []byte) []byte {
+	if r.parameters.AbsolutePrefix != "" && isRelativeLink(link) && link[0] != '.' {
+		newDest := r.parameters.AbsolutePrefix
+		if link[0] != '/' {
+			newDest += "/"
+		}
+		newDest += string(link)
+		return []byte(newDest)
+	}
+	return link
+}
+
+func appendLinkAttrs(attrs []string, flags HtmlFlags, link []byte) []string {
+	if isRelativeLink(link) {
+		return attrs
+	}
+	val := []string{}
+	if flags&NofollowLinks != 0 {
+		val = append(val, "nofollow")
+	}
+	if flags&NoreferrerLinks != 0 {
+		val = append(val, "noreferrer")
+	}
+	if flags&HrefTargetBlank != 0 {
+		attrs = append(attrs, "target=\"_blank\"")
+	}
+	if len(val) == 0 {
+		return attrs
+	}
+	attr := fmt.Sprintf("rel=%q", strings.Join(val, " "))
+	return append(attrs, attr)
+}
+
+func isMailto(link []byte) bool {
+	return bytes.HasPrefix(link, []byte("mailto:"))
+}
+
+func isSmartypantable(node *Node) bool {
+	pt := node.parent.Type
+	return pt != Link && pt != CodeBlock && pt != Code
+}
+
+func appendLanguageAttr(attrs []string, info []byte) []string {
+	infoWords := bytes.Split(info, []byte("\t "))
+	if len(infoWords) > 0 && len(infoWords[0]) > 0 {
+		attrs = append(attrs, fmt.Sprintf("class=\"language-%s\"", infoWords[0]))
+	}
+	return attrs
+}
+
+func (r *Html) Render(ast *Node) []byte {
+	//println("render_Blackfriday")
+	//dump(ast)
+	var buff bytes.Buffer
+	var lastOutput []byte
+	disableTags := 0
+	out := func(text []byte) {
+		if disableTags > 0 {
+			buff.Write(reHtmlTag.ReplaceAll(text, []byte{}))
+		} else {
+			buff.Write(text)
+		}
+		lastOutput = text
+	}
+	esc := func(text []byte, preserveEntities bool) []byte {
+		return attrEscape2(text)
+	}
+	esc2 := func(text []byte, preserveEntities bool) []byte {
+		e1 := []byte(html.EscapeString(string(text)))
+		e2 := bytes.Replace(e1, []byte("&#34;"), []byte("&quot;"), -1)
+		return bytes.Replace(e2, []byte("&#39;"), []byte{'\''}, -1)
+	}
+	cr := func() {
+		if len(lastOutput) > 0 {
+			out([]byte{'\n'})
+		}
+	}
+	forEachNode(ast, func(node *Node, entering bool) {
+		attrs := []string{}
+		switch node.Type {
+		case Text:
+			if r.flags&UseSmartypants != 0 && isSmartypantable(node) {
+				out(r.Smartypants2(node.literal))
+			} else {
+				out(esc(node.literal, false))
+			}
+			break
+		case Softbreak:
+			out([]byte("\n"))
+			// TODO: make it configurable via out(renderer.softbreak)
+		case Hardbreak:
+			out(tag("br", nil, true))
+			cr()
+		case Emph:
+			if entering {
+				out(tag("em", nil, false))
+			} else {
+				out(tag("/em", nil, false))
+			}
+			break
+		case Strong:
+			if entering {
+				out(tag("strong", nil, false))
+			} else {
+				out(tag("/strong", nil, false))
+			}
+			break
+		case Del:
+			if entering {
+				out(tag("del", nil, false))
+			} else {
+				out(tag("/del", nil, false))
+			}
+		case HtmlSpan:
+			//if options.safe {
+			//	out("<!-- raw HTML omitted -->")
+			//} else {
+			out(node.literal)
+			//}
+		case Link:
+			// mark it but don't link it if it is not a safe link: no smartypants
+			if r.flags&Safelink != 0 && !isSafeLink(node.destination) && !isMailto(node.destination) {
+				if entering {
+					out(tag("tt", nil, false))
+				} else {
+					out(tag("/tt", nil, false))
+				}
+			} else {
+				if entering {
+					node.destination = r.addAbsPrefix(node.destination)
+					//if (!(options.safe && potentiallyUnsafe(node.destination))) {
+					attrs = append(attrs, fmt.Sprintf("href=%q", esc(node.destination, true)))
+					//}
+					attrs = appendLinkAttrs(attrs, r.flags, node.destination)
+					if len(node.title) > 0 {
+						attrs = append(attrs, fmt.Sprintf("title=%q", esc(node.title, true)))
+					}
+					out(tag("a", attrs, false))
+				} else {
+					out(tag("/a", nil, false))
+				}
+			}
+		case Image:
+			if entering {
+				node.destination = r.addAbsPrefix(node.destination)
+				if disableTags == 0 {
+					//if options.safe && potentiallyUnsafe(node.destination) {
+					//out(`<img src="" alt="`)
+					//} else {
+					out([]byte(fmt.Sprintf(`<img src="%s" alt="`, esc(node.destination, true))))
+					//}
+				}
+				disableTags++
+			} else {
+				disableTags--
+				if disableTags == 0 {
+					if node.title != nil {
+						out([]byte(`" title="`))
+						out(esc(node.title, true))
+					}
+					out([]byte(`" />`))
+				}
+			}
+		case Code:
+			out(tag("code", nil, false))
+			out(esc2(node.literal, false))
+			out(tag("/code", nil, false))
+		case Document:
+			break
+		case Paragraph:
+			grandparent := node.parent.parent
+			if grandparent != nil && grandparent.Type == List && grandparent.listData.tight {
+				break
+			}
+			if entering {
+				if node.prev != nil {
+					t := node.prev.Type
+					if t == HtmlBlock || t == List || t == Paragraph || t == Header || t == CodeBlock || t == BlockQuote || t == HorizontalRule {
+						cr()
+					}
+				}
+				if node.parent.Type == BlockQuote && node.prev == nil {
+					cr()
+				}
+				out(tag("p", attrs, false))
+			} else {
+				out(tag("/p", attrs, false))
+				if !(node.parent.Type == Item && node.next == nil) {
+					cr()
+				}
+			}
+			break
+		case BlockQuote:
+			if entering {
+				cr()
+				out(tag("blockquote", attrs, false))
+			} else {
+				out(tag("/blockquote", nil, false))
+				cr()
+			}
+			break
+		case HtmlBlock:
+			cr()
+			out(node.literal)
+			cr()
+		case Header:
+			tagname := fmt.Sprintf("h%d", node.level)
+			if entering {
+				cr()
+				out(tag(tagname, attrs, false))
+			} else {
+				out(tag("/"+tagname, nil, false))
+				if !(node.parent.Type == Item && node.next == nil) {
+					cr()
+				}
+			}
+			break
+		case HorizontalRule:
+			cr()
+			out(tag("hr", attrs, r.flags&UseXHTML != 0))
+			cr()
+			break
+		case List:
+			tagName := "ul"
+			if node.listData.Type == OrderedList {
+				tagName = "ol"
+			}
+			if entering {
+				// var start = node.listStart;
+				// if (start !== null && start !== 1) {
+				//     attrs.push(['start', start.toString()]);
+				// }
+				cr()
+				if node.parent.Type == Item && node.parent.parent.listData.tight {
+					cr()
+				}
+				out(tag(tagName, attrs, false))
+				cr()
+			} else {
+				out(tag("/"+tagName, nil, false))
+				//cr()
+				//if node.parent.Type != Item {
+				//	cr()
+				//}
+				if node.parent.Type == Item && node.next != nil {
+					cr()
+				}
+				if node.parent.Type == Document || node.parent.Type == BlockQuote {
+					cr()
+				}
+			}
+		case Item:
+			if entering {
+				if node.prev != nil && !node.parent.listData.tight {
+					cr()
+				}
+				out(tag("li", nil, false))
+			} else {
+				out(tag("/li", nil, false))
+				cr()
+			}
+		case CodeBlock:
+			attrs = appendLanguageAttr(attrs, node.info)
+			cr()
+			out(tag("pre", nil, false))
+			out(tag("code", attrs, false))
+			out(esc2(node.literal, false))
+			out(tag("/code", nil, false))
+			out(tag("/pre", nil, false))
+			if node.parent.Type != Item {
+				cr()
+			}
+		default:
+			panic("Unknown node type " + node.Type.String())
+		}
+	})
+	return buff.Bytes()
 }
