@@ -464,7 +464,6 @@ func MarkdownOptions(input []byte, renderer Renderer, opts Options) []byte {
 		}
 	})
 	renderer.SetAST(p.doc)
-	//render_CommonMark(p.ast)
 	return renderer.Render(p.doc)
 }
 
@@ -482,7 +481,6 @@ func firstPass(p *parser, input []byte) (uint32, []byte) {
 	}
 	beg, end := 0, 0
 	lastFencedCodeBlockEnd := 0
-	//astParser := NewParser(p)
 	var numLines uint32
 	for beg < len(input) { // iterate over lines
 		if end = isReference(p, input[beg:], tabSize); end > 0 {
@@ -504,7 +502,6 @@ func firstPass(p *parser, input []byte) (uint32, []byte) {
 			}
 
 			// add the line body if present
-			//astParser.incorporateLine(input[beg:end])
 			numLines++
 			if end > beg {
 				if end < lastFencedCodeBlockEnd { // Do not expand tabs while inside fenced code blocks.
@@ -531,13 +528,6 @@ func firstPass(p *parser, input []byte) (uint32, []byte) {
 		out.WriteByte('\n')
 	}
 
-	//for astParser.tip != nil {
-	//astParser.finalize(astParser.tip, numLines)
-	//}
-	//astParser.processInlines(astParser.doc)
-	//p.ast = astParser.doc
-
-	//return out.Bytes()
 	return numLines, out.Bytes()
 }
 

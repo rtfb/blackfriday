@@ -1145,6 +1145,17 @@ func appendLanguageAttr(attrs []string, info []byte) []string {
 	return attrs
 }
 
+func tag(name string, attrs []string, selfClosing bool) []byte {
+	result := "<" + name
+	if attrs != nil && len(attrs) > 0 {
+		result += " " + strings.Join(attrs, " ")
+	}
+	if selfClosing {
+		result += " /"
+	}
+	return []byte(result + ">")
+}
+
 func (r *Html) Render(ast *Node) []byte {
 	//println("render_Blackfriday")
 	//dump(ast)
