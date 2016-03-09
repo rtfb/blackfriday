@@ -564,8 +564,8 @@ func link(p *parser, data []byte, offset int) int {
 	switch t {
 	case linkNormal:
 		linkNode := NewNode(Link)
-		linkNode.destination = normalizeURI(uLink)
-		linkNode.title = title
+		linkNode.Destination = normalizeURI(uLink)
+		linkNode.Title = title
 		p.currBlock.appendChild(linkNode)
 		if len(altContent) > 0 {
 			linkNode.appendChild(text(altContent))
@@ -583,8 +583,8 @@ func link(p *parser, data []byte, offset int) int {
 
 	case linkImg:
 		linkNode := NewNode(Image)
-		linkNode.destination = uLink
-		linkNode.title = title
+		linkNode.Destination = uLink
+		linkNode.Title = title
 		p.currBlock.appendChild(linkNode)
 		linkNode.appendChild(text(data[1:txtE]))
 		i += 1
@@ -649,10 +649,9 @@ func leftAngle(p *parser, data []byte, offset int) int {
 			if uLink.Len() > 0 {
 				link := uLink.Bytes()
 				node := NewNode(Link)
+				node.Destination = link
 				if altype == LinkTypeEmail {
-					node.destination = append([]byte("mailto:"), link...)
-				} else {
-					node.destination = link
+					node.Destination = append([]byte("mailto:"), link...)
 				}
 				p.currBlock.appendChild(node)
 				node.appendChild(text(stripMailto(link)))
@@ -883,7 +882,7 @@ func autoLink(p *parser, data []byte, offset int) int {
 
 	if uLink.Len() > 0 {
 		node := NewNode(Link)
-		node.destination = uLink.Bytes()
+		node.Destination = uLink.Bytes()
 		p.currBlock.appendChild(node)
 		node.appendChild(text(uLink.Bytes()))
 	}

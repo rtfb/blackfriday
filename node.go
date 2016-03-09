@@ -74,6 +74,12 @@ type ListData struct {
 	markerOffset uint32
 }
 
+type LinkData struct {
+	Destination []byte
+	Title       []byte
+	NoteID      int
+}
+
 type Node struct {
 	Type          NodeType
 	parent        *Node
@@ -94,9 +100,7 @@ type Node struct {
 	fenceChar   byte
 	fenceLength uint32
 	fenceOffset uint32
-	// Link fields:
-	destination []byte
-	title       []byte
+	LinkData    // If Type == Link, this holds link info
 }
 
 func NewNode(typ NodeType) *Node {

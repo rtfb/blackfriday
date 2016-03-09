@@ -1227,7 +1227,8 @@ func (r *Html) Render(ast *Node) []byte {
 			//}
 		case Link:
 			// mark it but don't link it if it is not a safe link: no smartypants
-			if r.flags&Safelink != 0 && !isSafeLink(node.destination) && !isMailto(node.destination) {
+			dest := node.LinkData.Destination
+			if r.flags&Safelink != 0 && !isSafeLink(dest) && !isMailto(dest) {
 				if entering {
 					out(tag("tt", nil, false))
 				} else {
@@ -1235,13 +1236,13 @@ func (r *Html) Render(ast *Node) []byte {
 				}
 			} else {
 				if entering {
-					node.destination = r.addAbsPrefix(node.destination)
+					dest = r.addAbsPrefix(dest)
 					//if (!(options.safe && potentiallyUnsafe(node.destination))) {
-					attrs = append(attrs, fmt.Sprintf("href=%q", esc(node.destination, true)))
+					attrs = append(attrs, fmt.Sprintf("href=%q", esc(dest, true)))
 					//}
-					attrs = appendLinkAttrs(attrs, r.flags, node.destination)
-					if len(node.title) > 0 {
-						attrs = append(attrs, fmt.Sprintf("title=%q", esc(node.title, true)))
+					attrs = appendLinkAttrs(attrs, r.flags, dest)
+					if len(node.LinkData.Title) > 0 {
+						attrs = append(attrs, fmt.Sprintf("title=%q", esc(node.LinkData.Title, true)))
 					}
 					out(tag("a", attrs, false))
 				} else {
@@ -1250,21 +1251,22 @@ func (r *Html) Render(ast *Node) []byte {
 			}
 		case Image:
 			if entering {
-				node.destination = r.addAbsPrefix(node.destination)
+				dest := node.LinkData.Destination
+				dest = r.addAbsPrefix(dest)
 				if disableTags == 0 {
-					//if options.safe && potentiallyUnsafe(node.destination) {
+					//if options.safe && potentiallyUnsafe(dest) {
 					//out(`<img src="" alt="`)
 					//} else {
-					out([]byte(fmt.Sprintf(`<img src="%s" alt="`, esc(node.destination, true))))
+					out([]byte(fmt.Sprintf(`<img src="%s" alt="`, esc(dest, true))))
 					//}
 				}
 				disableTags++
 			} else {
 				disableTags--
 				if disableTags == 0 {
-					if node.title != nil {
+					if node.LinkData.Title != nil {
 						out([]byte(`" title="`))
-						out(esc(node.title, true))
+						out(esc(node.LinkData.Title, true))
 					}
 					out([]byte(`" />`))
 				}
