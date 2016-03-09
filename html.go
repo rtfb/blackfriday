@@ -48,6 +48,16 @@ const (
 	SmartypantsAngledQuotes                       // Enable angled double quotes (with UseSmartypants) for double quotes rendering
 	FootnoteReturnLinks                           // Generate a link at the end of a footnote to return to the source
 
+	TagName               = "[A-Za-z][A-Za-z0-9-]*"
+	AttributeName         = "[a-zA-Z_:][a-zA-Z0-9:._-]*"
+	UnquotedValue         = "[^\"'=<>`\\x00-\\x20]+"
+	SingleQuotedValue     = "'[^']*'"
+	DoubleQuotedValue     = "\"[^\"]*\""
+	AttributeValue        = "(?:" + UnquotedValue + "|" + SingleQuotedValue + "|" + DoubleQuotedValue + ")"
+	AttributeValueSpec    = "(?:" + "\\s*=" + "\\s*" + AttributeValue + ")"
+	Attribute             = "(?:" + "\\s+" + AttributeName + AttributeValueSpec + "?)"
+	OpenTag               = "<" + TagName + Attribute + "*" + "\\s*/?>"
+	CloseTag              = "</" + TagName + "\\s*[>]"
 	HTMLComment           = "<!---->|<!--(?:-?[^>-])(?:-?[^-])*-->"
 	ProcessingInstruction = "[<][?].*?[?][>]"
 	Declaration           = "<![A-Z]+" + "\\s+[^>]*>"
