@@ -1,8 +1,6 @@
 package blackfriday
 
-import (
-	"bytes"
-)
+import "bytes"
 
 type Parser struct {
 	doc                  *Node
