@@ -72,6 +72,7 @@ type ListData struct {
 	delimiter    byte // '.' or ')' after the number in ordered lists
 	padding      uint32
 	markerOffset uint32
+	refLink      []byte // If not nil, turns this list item into a footnote item and triggers different rendering
 }
 
 type LinkData struct {

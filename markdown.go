@@ -462,8 +462,66 @@ func MarkdownOptions(input []byte, renderer Renderer, opts Options) []byte {
 			node.content = nil
 		}
 	})
+	p.parseRefsToAST()
 	renderer.SetAST(p.doc)
 	return renderer.Render(p.doc)
+}
+
+func (p *parser) parseRefsToAST() {
+	if p.flags&Footnotes == 0 || len(p.notes) == 0 {
+		return
+	}
+	p.tip = p.doc
+	finalizeHtmlBlock(p.addBlock(HtmlBlock, []byte(`<div class="footnotes">`)))
+	p.addBlock(HorizontalRule, nil)
+	block := p.addBlock(List, nil)
+	block.listData = &ListData{ // TODO: fill in the real ListData
+		Type:         OrderedList,
+		tight:        false,
+		bulletChar:   '*',
+		start:        0,
+		delimiter:    0,
+		padding:      0,
+		markerOffset: 0,
+	}
+	flags := ListItemBeginningOfList
+	// Note: this loop is intentionally explicit, not range-form. This is
+	// because the body of the loop will append nested footnotes to p.notes and
+	// we need to process those late additions. Range form would only walk over
+	// the fixed initial set.
+	for i := 0; i < len(p.notes); i++ {
+		ref := p.notes[i]
+		block := p.addBlock(Item, nil)
+		block.listData = &ListData{ // TODO: fill in the real ListData
+			Type:         OrderedList,
+			tight:        false,
+			bulletChar:   '*',
+			start:        0,
+			delimiter:    0,
+			padding:      0,
+			markerOffset: 0,
+			refLink:      ref.link,
+		}
+		if ref.hasBlock {
+			flags |= ListItemContainsBlock
+			p.block(ref.title)
+		} else {
+			p.currBlock = block
+			p.inline(ref.title)
+		}
+		flags &^= ListItemBeginningOfList | ListItemContainsBlock
+	}
+	above := block.parent
+	finalizeList(block)
+	p.tip = above
+	finalizeHtmlBlock(p.addBlock(HtmlBlock, []byte("</div>")))
+	forEachNode(block, func(node *Node, entering bool) {
+		if node.Type == Paragraph || node.Type == Header {
+			p.currBlock = node
+			p.inline(node.content)
+			node.content = nil
+		}
+	})
 }
 
 // first pass:
@@ -531,39 +589,15 @@ func firstPass(p *parser, input []byte) (uint32, []byte) {
 }
 
 // second pass: actual rendering
-func secondPass(p *parser, input []byte) []byte {
+func secondPass(p *parser, input []byte) {
+	// TODO: implement DocumentHeader and DocumentFooter in AST
 	p.r.DocumentHeader()
 	p.block(input)
-
-	if p.flags&Footnotes != 0 && len(p.notes) > 0 {
-		p.r.BeginFootnotes()
-		flags := ListItemBeginningOfList
-		for i := 0; i < len(p.notes); i += 1 {
-			ref := p.notes[i]
-			var buf bytes.Buffer
-			if ref.hasBlock {
-				flags |= ListItemContainsBlock
-				buf.Write(p.r.CaptureWrites(func() {
-					p.block(ref.title)
-				}))
-			} else {
-				buf.Write(p.r.CaptureWrites(func() {
-					p.inline(ref.title)
-				}))
-			}
-			p.r.FootnoteItem(ref.link, buf.Bytes(), flags)
-			flags &^= ListItemBeginningOfList | ListItemContainsBlock
-		}
-		p.r.EndFootnotes()
-	}
-
 	p.r.DocumentFooter()
 
 	if p.nesting != 0 {
 		panic("Nesting level did not end at zero")
 	}
-
-	return p.r.GetResult()
 }
 
 //

@@ -1156,6 +1156,21 @@ func tag(name string, attrs []string, selfClosing bool) []byte {
 	return []byte(result + ">")
 }
 
+func footnoteRef(prefix string, node *Node) []byte {
+	urlFrag := prefix + string(slugify(node.Destination))
+	anchor := fmt.Sprintf(`<a rel="footnote" href="#fn:%s">%d</a>`, urlFrag, node.NoteID)
+	return []byte(fmt.Sprintf(`<sup class="footnote-ref" id="fnref:%s">%s</sup>`, urlFrag, anchor))
+}
+
+func footnoteItem(prefix string, slug []byte) []byte {
+	return []byte(fmt.Sprintf(`<li id="fn:%s%s">`, prefix, slug))
+}
+
+func footnoteReturnLink(prefix, returnLink string, slug []byte) []byte {
+	const format = ` <a class="footnote-return" href="#fnref:%s%s">%s</a>`
+	return []byte(fmt.Sprintf(format, prefix, slug, returnLink))
+}
+
 func (r *Html) Render(ast *Node) []byte {
 	//println("render_Blackfriday")
 	//dump(ast)
@@ -1240,12 +1255,19 @@ func (r *Html) Render(ast *Node) []byte {
 					//if (!(options.safe && potentiallyUnsafe(node.destination))) {
 					attrs = append(attrs, fmt.Sprintf("href=%q", esc(dest, true)))
 					//}
+					if node.NoteID != 0 {
+						out(footnoteRef(r.parameters.FootnoteAnchorPrefix, node))
+						break
+					}
 					attrs = appendLinkAttrs(attrs, r.flags, dest)
 					if len(node.LinkData.Title) > 0 {
 						attrs = append(attrs, fmt.Sprintf("title=%q", esc(node.LinkData.Title, true)))
 					}
 					out(tag("a", attrs, false))
 				} else {
+					if node.NoteID != 0 {
+						break
+					}
 					out(tag("/a", nil, false))
 				}
 			}
@@ -1364,8 +1386,19 @@ func (r *Html) Render(ast *Node) []byte {
 				if node.prev != nil && !node.parent.listData.tight {
 					cr()
 				}
+				if node.listData.refLink != nil {
+					slug := slugify(node.listData.refLink)
+					out(footnoteItem(r.parameters.FootnoteAnchorPrefix, slug))
+					break
+				}
 				out(tag("li", nil, false))
 			} else {
+				if node.listData.refLink != nil {
+					slug := slugify(node.listData.refLink)
+					if r.flags&FootnoteReturnLinks != 0 {
+						out(footnoteReturnLink(r.parameters.FootnoteAnchorPrefix, r.parameters.FootnoteReturnLinkContents, slug))
+					}
+				}
 				out(tag("/li", nil, false))
 				cr()
 			}

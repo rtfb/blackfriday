@@ -589,14 +589,15 @@ func link(p *parser, data []byte, offset int) int {
 		linkNode.appendChild(text(data[1:txtE]))
 		i += 1
 
-	case linkInlineFootnote:
-		//println("linkInlineFootnote")
-		p.r.FootnoteRef(link, noteId)
-		i += 1
-
-	case linkDeferredFootnote:
-		//println("linkDeferredFootnote")
-		p.r.FootnoteRef(link, noteId)
+	case linkInlineFootnote, linkDeferredFootnote:
+		linkNode := NewNode(Link)
+		linkNode.Destination = link
+		linkNode.Title = title
+		linkNode.NoteID = noteId
+		p.currBlock.appendChild(linkNode)
+		if t == linkInlineFootnote {
+			i++
+		}
 
 	default:
 		return 0
