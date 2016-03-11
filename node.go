@@ -113,17 +113,8 @@ type Node struct {
 
 func NewNode(typ NodeType) *Node {
 	return &Node{
-		Type:          typ,
-		parent:        nil,
-		firstChild:    nil,
-		lastChild:     nil,
-		prev:          nil,
-		next:          nil,
-		content:       nil,
-		level:         0,
-		open:          true,
-		lastLineBlank: false,
-		literal:       nil,
+		Type: typ,
+		open: true,
 	}
 }
 
