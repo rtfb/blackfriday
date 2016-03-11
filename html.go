@@ -1171,6 +1171,23 @@ func footnoteReturnLink(prefix, returnLink string, slug []byte) []byte {
 	return []byte(fmt.Sprintf(format, prefix, slug, returnLink))
 }
 
+func itemOpenCR(node *Node) bool {
+	if node.prev == nil {
+		return false
+	}
+	ld := node.parent.listData
+	return !ld.tight && ld.Flags&ListTypeDefinition == 0
+}
+
+func skipParagraphTags(node *Node) bool {
+	grandparent := node.parent.parent
+	if grandparent == nil || grandparent.listData == nil {
+		return false
+	}
+	tightOrTerm := grandparent.listData.tight || node.parent.listData.Flags&ListTypeTerm != 0
+	return grandparent.Type == List && tightOrTerm
+}
+
 func (r *Html) Render(ast *Node) []byte {
 	//println("render_Blackfriday")
 	//dump(ast)
@@ -1300,8 +1317,7 @@ func (r *Html) Render(ast *Node) []byte {
 		case Document:
 			break
 		case Paragraph:
-			grandparent := node.parent.parent
-			if grandparent != nil && grandparent.Type == List && grandparent.listData.tight {
+			if skipParagraphTags(node) {
 				break
 			}
 			if entering {
@@ -1357,6 +1373,9 @@ func (r *Html) Render(ast *Node) []byte {
 			if node.listData.Flags&ListTypeOrdered != 0 {
 				tagName = "ol"
 			}
+			if node.listData.Flags&ListTypeDefinition != 0 {
+				tagName = "dl"
+			}
 			if entering {
 				// var start = node.listStart;
 				// if (start !== null && start !== 1) {
@@ -1382,8 +1401,15 @@ func (r *Html) Render(ast *Node) []byte {
 				}
 			}
 		case Item:
+			tagName := "li"
+			if node.listData.Flags&ListTypeDefinition != 0 {
+				tagName = "dd"
+			}
+			if node.listData.Flags&ListTypeTerm != 0 {
+				tagName = "dt"
+			}
 			if entering {
-				if node.prev != nil && !node.parent.listData.tight {
+				if itemOpenCR(node) {
 					cr()
 				}
 				if node.listData.refLink != nil {
@@ -1391,7 +1417,7 @@ func (r *Html) Render(ast *Node) []byte {
 					out(footnoteItem(r.parameters.FootnoteAnchorPrefix, slug))
 					break
 				}
-				out(tag("li", nil, false))
+				out(tag(tagName, nil, false))
 			} else {
 				if node.listData.refLink != nil {
 					slug := slugify(node.listData.refLink)
@@ -1399,7 +1425,7 @@ func (r *Html) Render(ast *Node) []byte {
 						out(footnoteReturnLink(r.parameters.FootnoteAnchorPrefix, r.parameters.FootnoteReturnLinkContents, slug))
 					}
 				}
-				out(tag("/li", nil, false))
+				out(tag("/"+tagName, nil, false))
 				cr()
 			}
 		case CodeBlock:
