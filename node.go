@@ -27,6 +27,11 @@ const (
 	Hardbreak
 	Code
 	HtmlSpan
+	Table
+	TableCell
+	TableHead
+	TableBody
+	TableRow
 )
 
 var nodeTypeNames = []string{
@@ -49,6 +54,11 @@ var nodeTypeNames = []string{
 	Hardbreak:      "Hardbreak",
 	Code:           "Code",
 	HtmlSpan:       "HtmlSpan",
+	Table:          "Table",
+	TableCell:      "TableCell",
+	TableHead:      "TableHead",
+	TableBody:      "TableBody",
+	TableRow:       "TableRow",
 }
 
 func (t NodeType) String() string {
@@ -95,6 +105,10 @@ type Node struct {
 	LinkData            // If Type == Link, this holds link info
 	HeaderID     string // If Type == Header, this might hold header ID, if present
 	IsTitleblock bool
+	IsHeader     bool // If Type == TableCell, this tells if it's under the header row
+
+	// TODO: convert the int to a proper type
+	Align int // If Type == TableCell, this holds the value for align attribute
 }
 
 func NewNode(typ NodeType) *Node {
@@ -179,6 +193,16 @@ func (n *Node) isContainer() bool {
 	case Link:
 		fallthrough
 	case Image:
+		fallthrough
+	case Table:
+		fallthrough
+	case TableHead:
+		fallthrough
+	case TableBody:
+		fallthrough
+	case TableRow:
+		fallthrough
+	case TableCell:
 		return true
 	default:
 		return false
@@ -192,6 +216,15 @@ func (n *Node) canContain(t NodeType) bool {
 	}
 	if n.Type == Document || n.Type == BlockQuote || n.Type == Item {
 		return t != Item
+	}
+	if n.Type == Table {
+		return t == TableHead || t == TableBody
+	}
+	if n.Type == TableHead || n.Type == TableBody {
+		return t == TableRow
+	}
+	if n.Type == TableRow {
+		return t == TableCell
 	}
 	return false
 }

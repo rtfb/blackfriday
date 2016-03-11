@@ -456,7 +456,7 @@ func MarkdownOptions(input []byte, renderer Renderer, opts Options) []byte {
 		p.finalize(p.tip, numLines)
 	}
 	forEachNode(p.doc, func(node *Node, entering bool) {
-		if node.Type == Paragraph || node.Type == Header {
+		if node.Type == Paragraph || node.Type == Header || node.Type == TableCell {
 			p.currBlock = node
 			p.inline(node.content)
 			node.content = nil

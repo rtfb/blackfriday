@@ -67,12 +67,6 @@ const (
 )
 
 var (
-	alignments = []string{
-		"left",
-		"right",
-		"center",
-	}
-
 	// TODO: improve this regexp to catch all possible entities:
 	htmlEntity = regexp.MustCompile(`&[a-z]{2,5};`)
 	reHtmlTag  = regexp.MustCompile("(?i)^" + HTMLTag)
@@ -1188,6 +1182,19 @@ func skipParagraphTags(node *Node) bool {
 	return grandparent.Type == List && tightOrTerm
 }
 
+func cellAlignment(align int) string {
+	switch align {
+	case TableAlignmentLeft:
+		return "left"
+	case TableAlignmentRight:
+		return "right"
+	case TableAlignmentCenter:
+		return "center"
+	default:
+		return ""
+	}
+}
+
 func (r *Html) Render(ast *Node) []byte {
 	//println("render_Blackfriday")
 	//dump(ast)
@@ -1450,6 +1457,60 @@ func (r *Html) Render(ast *Node) []byte {
 			out(tag("/code", nil, false))
 			out(tag("/pre", nil, false))
 			if node.parent.Type != Item {
+				cr()
+			}
+		case Table:
+			if entering {
+				cr()
+				out(tag("table", nil, false))
+			} else {
+				out(tag("/table", nil, false))
+				cr()
+			}
+		case TableCell:
+			tagName := "td"
+			if node.IsHeader {
+				tagName = "th"
+			}
+			if entering {
+				align := cellAlignment(node.Align)
+				if align != "" {
+					attrs = append(attrs, fmt.Sprintf(`align="%s"`, align))
+				}
+				if node.prev == nil {
+					cr()
+				}
+				out(tag(tagName, attrs, false))
+			} else {
+				out(tag("/"+tagName, nil, false))
+				cr()
+			}
+		case TableHead:
+			if entering {
+				cr()
+				out(tag("thead", nil, false))
+			} else {
+				out(tag("/thead", nil, false))
+				cr()
+			}
+		case TableBody:
+			if entering {
+				cr()
+				out(tag("tbody", nil, false))
+				// XXX: this is to adhere to a rather silly test. Should fix test.
+				if node.firstChild == nil {
+					cr()
+				}
+			} else {
+				out(tag("/tbody", nil, false))
+				cr()
+			}
+		case TableRow:
+			if entering {
+				cr()
+				out(tag("tr", nil, false))
+			} else {
+				out(tag("/tr", nil, false))
 				cr()
 			}
 		default:

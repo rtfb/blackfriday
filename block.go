@@ -747,35 +747,33 @@ func finalizeCodeBlock(block *Node) {
 }
 
 func (p *parser) table(data []byte) int {
-	var header bytes.Buffer
-	i, columns := p.tableHeader(&header, data)
+	table := p.addBlock(Table, nil)
+	i, columns := p.tableHeader(data)
 	if i == 0 {
+		p.tip = table.parent
+		table.unlink()
 		return 0
 	}
 
-	var body bytes.Buffer
+	p.addBlock(TableBody, nil)
 
-	body.Write(p.r.CaptureWrites(func() {
-		for i < len(data) {
-			pipes, rowStart := 0, i
-			for ; data[i] != '\n'; i++ {
-				if data[i] == '|' {
-					pipes++
-				}
+	for i < len(data) {
+		pipes, rowStart := 0, i
+		for ; data[i] != '\n'; i++ {
+			if data[i] == '|' {
+				pipes++
 			}
-
-			if pipes == 0 {
-				i = rowStart
-				break
-			}
-
-			// include the newline in data sent to tableRow
-			i++
-			p.tableRow(data[rowStart:i], columns, false)
 		}
-	}))
 
-	p.r.Table(header.Bytes(), body.Bytes(), columns)
+		if pipes == 0 {
+			i = rowStart
+			break
+		}
+
+		// include the newline in data sent to tableRow
+		i++
+		p.tableRow(data[rowStart:i], columns, false)
+	}
 
 	return i
 }
@@ -789,7 +787,7 @@ func isBackslashEscaped(data []byte, i int) bool {
 	return backslashes&1 == 1
 }
 
-func (p *parser) tableHeader(out *bytes.Buffer, data []byte) (size int, columns []int) {
+func (p *parser) tableHeader(data []byte) (size int, columns []int) {
 	i := 0
 	colCount := 1
 	for i = 0; data[i] != '\n'; i++ {
@@ -887,16 +885,15 @@ func (p *parser) tableHeader(out *bytes.Buffer, data []byte) (size int, columns 
 		return
 	}
 
-	out.Write(p.r.CaptureWrites(func() {
-		p.tableRow(header, columns, true)
-	}))
+	p.addBlock(TableHead, nil)
+	p.tableRow(header, columns, true)
 	size = i + 1
 	return
 }
 
 func (p *parser) tableRow(data []byte, columns []int, header bool) {
+	p.addBlock(TableRow, nil)
 	i, col := 0, 0
-	var rowWork bytes.Buffer
 
 	if data[i] == '|' && !isBackslashEscaped(data, i) {
 		i++
@@ -922,29 +919,19 @@ func (p *parser) tableRow(data []byte, columns []int, header bool) {
 			cellEnd--
 		}
 
-		cellWork := p.r.CaptureWrites(func() {
-			p.inline(data[cellStart:cellEnd])
-		})
-
-		if header {
-			p.r.TableHeaderCell(&rowWork, cellWork, columns[col])
-		} else {
-			p.r.TableCell(&rowWork, cellWork, columns[col])
-		}
+		cell := p.addBlock(TableCell, data[cellStart:cellEnd])
+		cell.IsHeader = header
+		cell.Align = columns[col]
 	}
 
 	// pad it out with empty columns to get the right number
 	for ; col < len(columns); col++ {
-		if header {
-			p.r.TableHeaderCell(&rowWork, nil, columns[col])
-		} else {
-			p.r.TableCell(&rowWork, nil, columns[col])
-		}
+		cell := p.addBlock(TableCell, nil)
+		cell.IsHeader = header
+		cell.Align = columns[col]
 	}
 
 	// silently ignore rows with too many cells
-
-	p.r.TableRow(rowWork.Bytes())
 }
 
 // returns blockquote prefix length

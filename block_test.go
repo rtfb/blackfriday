@@ -47,11 +47,6 @@ func doTestsBlockWithRunner(t *testing.T, tests []string, extensions Extensions,
 		}
 	}()
 
-	// XXX: Skip testing extensions that are not implemented yet
-	if extensions&Tables != 0 {
-		return
-	}
-
 	for i := 0; i+1 < len(tests); i += 2 {
 		input := tests[i]
 		candidate = input
