@@ -1435,14 +1435,14 @@ func (p *parser) paragraph(data []byte) int {
 					eol--
 				}
 
-				// TODO: reintroduce AutoHeaderIDs
-				//id := ""
-				//if p.flags&AutoHeaderIDs != 0 {
-				//	id = sanitized_anchor_name.Create(string(data[prev:eol]))
-				//}
+				id := ""
+				if p.flags&AutoHeaderIDs != 0 {
+					id = sanitized_anchor_name.Create(string(data[prev:eol]))
+				}
 
 				block := p.addBlock(Header, data[prev:eol])
 				block.level = uint32(level)
+				block.HeaderID = id
 
 				// find the end of the underline
 				for data[i] != '\n' {
