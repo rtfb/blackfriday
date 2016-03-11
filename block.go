@@ -312,9 +312,14 @@ func (p *parser) titleBlock(data []byte, doRender bool) int {
 	}
 
 	data = bytes.Join(splitData[0:i], []byte("\n"))
-	p.r.TitleBlock(data)
+	consumed := len(data)
+	data = bytes.TrimPrefix(data, []byte("% "))
+	data = bytes.Replace(data, []byte("\n% "), []byte("\n"), -1)
+	block := p.addBlock(Header, data)
+	block.level = 1
+	block.IsTitleblock = true
 
-	return len(data)
+	return consumed
 }
 
 func (p *parser) html(data []byte, doRender bool) int {

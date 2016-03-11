@@ -1354,6 +1354,9 @@ func (r *Html) Render(ast *Node) []byte {
 		case Header:
 			tagname := fmt.Sprintf("h%d", node.level)
 			if entering {
+				if node.IsTitleblock {
+					attrs = append(attrs, `class="title"`)
+				}
 				if node.HeaderID != "" {
 					id := r.ensureUniqueHeaderID(node.HeaderID)
 					if r.parameters.HeaderIDPrefix != "" {

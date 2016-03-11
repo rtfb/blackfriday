@@ -48,8 +48,7 @@ func doTestsBlockWithRunner(t *testing.T, tests []string, extensions Extensions,
 	}()
 
 	// XXX: Skip testing extensions that are not implemented yet
-	if extensions&Tables != 0 ||
-		extensions&Titleblock != 0 {
+	if extensions&Tables != 0 {
 		return
 	}
 
@@ -1509,8 +1508,8 @@ func TestTitleBlock_EXTENSION_TITLEBLOCK(t *testing.T) {
 		"<h1 class=\"title\">" +
 			"Some title\n" +
 			"Another title line\n" +
-			"Yep, more here too\n" +
-			"</h1>",
+			"Yep, more here too" +
+			"</h1>\n",
 	}
 	doTestsBlock(t, tests, Titleblock)
 }
