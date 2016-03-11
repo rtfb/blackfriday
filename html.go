@@ -1354,6 +1354,16 @@ func (r *Html) Render(ast *Node) []byte {
 		case Header:
 			tagname := fmt.Sprintf("h%d", node.level)
 			if entering {
+				if node.HeaderID != "" {
+					id := r.ensureUniqueHeaderID(node.HeaderID)
+					if r.parameters.HeaderIDPrefix != "" {
+						id = r.parameters.HeaderIDPrefix + id
+					}
+					if r.parameters.HeaderIDSuffix != "" {
+						id = id + r.parameters.HeaderIDSuffix
+					}
+					attrs = append(attrs, fmt.Sprintf(`id="%s"`, id))
+				}
 				cr()
 				out(tag(tagname, attrs, false))
 			} else {

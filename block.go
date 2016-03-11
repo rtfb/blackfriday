@@ -266,6 +266,7 @@ func (p *parser) prefixHeader(data []byte) int {
 			id = sanitized_anchor_name.Create(string(data[i:end]))
 		}
 		block := p.addBlock(Header, data[i:end])
+		block.HeaderID = id
 		block.level = uint32(level)
 	}
 	return skip

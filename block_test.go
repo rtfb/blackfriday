@@ -49,7 +49,6 @@ func doTestsBlockWithRunner(t *testing.T, tests []string, extensions Extensions,
 
 	// XXX: Skip testing extensions that are not implemented yet
 	if extensions&AutoHeaderIDs != 0 ||
-		extensions&HeaderIDs != 0 ||
 		extensions&Tables != 0 ||
 		extensions&Titleblock != 0 {
 		return

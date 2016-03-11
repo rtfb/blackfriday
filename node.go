@@ -92,7 +92,8 @@ type Node struct {
 	fenceChar   byte
 	fenceLength uint32
 	fenceOffset uint32
-	LinkData    // If Type == Link, this holds link info
+	LinkData           // If Type == Link, this holds link info
+	HeaderID    string // If Type == Header, this might hold header ID, if present
 }
 
 func NewNode(typ NodeType) *Node {
