@@ -1354,7 +1354,7 @@ func (r *Html) Render(ast *Node) []byte {
 			break
 		case List:
 			tagName := "ul"
-			if node.listData.Type == OrderedList {
+			if node.listData.Flags&ListTypeOrdered != 0 {
 				tagName = "ol"
 			}
 			if entering {

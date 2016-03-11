@@ -1112,20 +1112,13 @@ func (p *parser) dliPrefix(data []byte) int {
 	return i + 2
 }
 
-func convertListType(flags ListType) ASTListType {
-	if flags&ListTypeOrdered != 0 {
-		return OrderedList
-	}
-	return BulletList
-}
-
 // parse ordered or unordered list block
 func (p *parser) list(data []byte, flags ListType) int {
 	i := 0
 	flags |= ListItemBeginningOfList
 	block := p.addBlock(List, nil)
 	block.listData = &ListData{ // TODO: fill in the real ListData
-		Type:         convertListType(flags),
+		Flags:        flags,
 		tight:        true,
 		bulletChar:   '*',
 		start:        0,
@@ -1345,7 +1338,7 @@ gatherlines:
 
 	block := p.addBlock(Item, nil)
 	block.listData = &ListData{ // TODO: fill in the real ListData
-		Type:         convertListType(*flags),
+		Flags:        *flags,
 		tight:        false,
 		bulletChar:   '*',
 		start:        0,

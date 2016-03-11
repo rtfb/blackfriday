@@ -476,7 +476,7 @@ func (p *parser) parseRefsToAST() {
 	p.addBlock(HorizontalRule, nil)
 	block := p.addBlock(List, nil)
 	block.listData = &ListData{ // TODO: fill in the real ListData
-		Type:         OrderedList,
+		Flags:        ListTypeOrdered,
 		tight:        false,
 		bulletChar:   '*',
 		start:        0,
@@ -493,7 +493,7 @@ func (p *parser) parseRefsToAST() {
 		ref := p.notes[i]
 		block := p.addBlock(Item, nil)
 		block.listData = &ListData{ // TODO: fill in the real ListData
-			Type:         OrderedList,
+			Flags:        ListTypeOrdered,
 			tight:        false,
 			bulletChar:   '*',
 			start:        0,
